@@ -9,12 +9,13 @@ const _parentTypes = {'father', 'mother'};
 const _childTypes = {'son', 'daughter'};
 const _spouseTypes = {'husband', 'wife', 'spouse'};
 
-const double nodeW = 248;
-const double nodeH = 88;
+const double nodeW = 256;
+const double nodeH = 100;
 const double spouseGap = 36;
 const double unitGap = 48;
 const double rowGap = 64;
-const double gutter = 200;
+/// Left label column — tighter than web desktop (200) for phone fit.
+const double gutter = 118;
 const double stride = nodeH + rowGap;
 
 const _bandColors = [
