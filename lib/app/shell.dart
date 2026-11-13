@@ -36,30 +36,8 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
-  int _indexForLocation(String loc) {
-    if (loc.startsWith('/family/tree')) return 1;
-    if (loc.startsWith('/family/members') ||
-        loc.startsWith('/family/invitations')) {
-      return 2;
-    }
-    if (loc.startsWith('/family/media') || loc.startsWith('/family/photos')) {
-      return 3;
-    }
-    if (loc.startsWith('/family/profile') ||
-        loc.startsWith('/family/admin') ||
-        loc.startsWith('/family/map') ||
-        loc.startsWith('/family/events') ||
-        loc.startsWith('/family/privacy') ||
-        loc.startsWith('/admin/')) {
-      return 4;
-    }
-    return 0;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final loc = GoRouterState.of(context).matchedLocation;
-    final index = _indexForLocation(loc);
     final auth = context.watch<AuthProvider>();
     final family = context.watch<FamilySessionProvider>();
     final wide = MediaQuery.sizeOf(context).width >= 840;
@@ -102,122 +80,6 @@ class _AppShellState extends State<AppShell> {
           Expanded(child: widget.child),
         ],
       ),
-      bottomNavigationBar: wide
-          ? null
-          : NavigationBar(
-              height: 64,
-              selectedIndex: index.clamp(0, 4),
-              onDestinationSelected: (i) {
-                switch (i) {
-                  case 0:
-                    context.go('/dashboard');
-                  case 1:
-                    context.go('/family/tree');
-                  case 2:
-                    context.go('/family/members');
-                  case 3:
-                    context.go('/family/media');
-                  case 4:
-                    _openMore(context, auth);
-                }
-              },
-              destinations: const [
-                NavigationDestination(
-                  icon: Icon(Icons.dashboard_outlined),
-                  selectedIcon: Icon(Icons.dashboard, color: AppTheme.forest),
-                  label: 'Home',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.account_tree_outlined),
-                  selectedIcon:
-                      Icon(Icons.account_tree, color: AppTheme.forest),
-                  label: 'Tree',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.groups_outlined),
-                  selectedIcon: Icon(Icons.groups, color: AppTheme.forest),
-                  label: 'Members',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.photo_library_outlined),
-                  selectedIcon:
-                      Icon(Icons.photo_library, color: AppTheme.forest),
-                  label: 'Media',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.more_horiz),
-                  selectedIcon: Icon(Icons.more_horiz, color: AppTheme.forest),
-                  label: 'More',
-                ),
-              ],
-            ),
-    );
-  }
-
-  void _openMore(BuildContext context, AuthProvider auth) {
-    showModalBottomSheet(
-      context: context,
-      showDragHandle: true,
-      isScrollControlled: true,
-      builder: (ctx) => SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.person),
-                title: const Text('Profile'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  context.go('/family/profile');
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.map_outlined),
-                title: const Text('Map'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  context.go('/family/map');
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.event),
-                title: const Text('Events'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  context.go('/family/events');
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.admin_panel_settings_outlined),
-                title: const Text('Family Admin'),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  context.go('/family/admin');
-                },
-              ),
-              if (auth.hasPermission('family.read'))
-                ListTile(
-                  leading: const Icon(Icons.diversity_3),
-                  title: const Text('All Families'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    context.go('/admin/families');
-                  },
-                ),
-              ListTile(
-                leading: const Icon(Icons.logout, color: Colors.redAccent),
-                title: const Text('Logout'),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  await auth.logout();
-                  if (context.mounted) context.go('/login');
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
@@ -243,14 +105,15 @@ class _AppDrawer extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 8),
       children: [
         ListTile(
-          title: Text(familyName, style: AppTheme.display(size: 18)),
+          title: Text(familyName, style: AppTheme.display(size: 20)),
           subtitle: Text(
             userName,
-            style: AppTheme.body(size: 12, color: AppTheme.muted),
+            style: AppTheme.body(size: 14, color: AppTheme.muted),
           ),
           leading: const CircleAvatar(
+            radius: 22,
             backgroundColor: AppTheme.emerald100,
-            child: Icon(Icons.park, color: AppTheme.forest),
+            child: Icon(Icons.park, color: AppTheme.forest, size: 24),
           ),
         ),
         const Divider(),
@@ -277,8 +140,11 @@ class _AppDrawer extends StatelessWidget {
           _item(context, Icons.diversity_3, 'All Families', '/admin/families'),
         const Divider(),
         ListTile(
-          leading: const Icon(Icons.logout, color: Colors.redAccent),
-          title: Text('Logout', style: AppTheme.body(weight: FontWeight.w600)),
+          leading: const Icon(Icons.logout, color: Colors.redAccent, size: 22),
+          title: Text(
+            'Logout',
+            style: AppTheme.body(size: 16, weight: FontWeight.w700),
+          ),
           onTap: () {
             if (!permanent) Navigator.pop(context);
             onLogout();
@@ -290,7 +156,11 @@ class _AppDrawer extends StatelessWidget {
     if (permanent) {
       return SafeArea(child: content);
     }
-    return Drawer(backgroundColor: Colors.white, child: SafeArea(child: content));
+    return Drawer(
+      width: MediaQuery.sizeOf(context).width * 0.72,
+      backgroundColor: Colors.white,
+      child: SafeArea(child: content),
+    );
   }
 
   Widget _item(
@@ -303,16 +173,15 @@ class _AppDrawer extends StatelessWidget {
     final active =
         loc == path || (path != '/dashboard' && loc.startsWith(path));
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       child: ListTile(
-        dense: true,
-        visualDensity: VisualDensity.compact,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         selected: active,
         selectedTileColor: AppTheme.forest,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
         leading: Icon(
           icon,
-          size: 18,
+          size: 22,
           color: active ? Colors.white : AppTheme.muted,
         ),
         title: Text(
@@ -320,9 +189,9 @@ class _AppDrawer extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: AppTheme.body(
-            size: 13,
-            weight: FontWeight.w600,
-            color: active ? Colors.white : const Color(0xFF475569),
+            size: 16,
+            weight: FontWeight.w700,
+            color: active ? Colors.white : const Color(0xFF334155),
           ),
         ),
         onTap: () {

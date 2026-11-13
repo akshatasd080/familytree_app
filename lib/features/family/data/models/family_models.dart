@@ -41,6 +41,10 @@ class FamilyMember {
     this.phone,
     this.avatar,
     this.gender,
+    this.location,
+    this.emailStatus,
+    this.joinedAt,
+    this.isAlive = true,
     this.profileInfo = const {},
   });
 
@@ -53,7 +57,20 @@ class FamilyMember {
   final String? phone;
   final String? avatar;
   final String? gender;
+  final String? location;
+  final String? emailStatus;
+  final String? joinedAt;
+  final bool isAlive;
   final Map<String, dynamic> profileInfo;
+
+  bool get isSiteCreator =>
+      (relationship ?? '').toLowerCase().replaceAll(' ', '') == 'sitecreator';
+
+  String get displayEmail {
+    final e = (email ?? '').trim();
+    if (e.isEmpty || e.endsWith('@phone.familytree.local')) return '';
+    return e;
+  }
 
   factory FamilyMember.fromJson(Map<String, dynamic> json) {
     final user = json['user'] is Map
@@ -63,6 +80,7 @@ class FamilyMember {
     final profileMap = profile is Map
         ? Map<String, dynamic>.from(profile)
         : <String, dynamic>{};
+    final aliveRaw = json['is_alive'] ?? json['isAlive'] ?? profileMap['isAlive'];
     return FamilyMember(
       id: (json['id'] ?? '').toString(),
       name: (json['name'] ??
@@ -74,12 +92,26 @@ class FamilyMember {
       relationship: (json['relationship'])?.toString(),
       status: (json['status'] ?? json['membershipStatus'])?.toString(),
       email: (json['email'] ?? user['email'] ?? profileMap['email'])?.toString(),
-      phone: (json['phone'] ?? user['phone'] ?? profileMap['phone'])?.toString(),
+      phone: (json['phone'] ??
+              user['phone'] ??
+              profileMap['phone'] ??
+              profileMap['contactNumber'])
+          ?.toString(),
       avatar: (json['avatar'] ??
               profileMap['avatar'] ??
               user['avatar'])
           ?.toString(),
       gender: (json['gender'] ?? profileMap['gender'])?.toString(),
+      location: (json['location'] ?? profileMap['location'])?.toString(),
+      emailStatus:
+          (json['emailStatus'] ?? json['email_status'] ?? profileMap['emailStatus'])
+              ?.toString(),
+      joinedAt: (json['joinedAt'] ??
+              json['joined_at'] ??
+              json['createdAt'] ??
+              json['created_at'])
+          ?.toString(),
+      isAlive: aliveRaw != false,
       profileInfo: profileMap,
     );
   }

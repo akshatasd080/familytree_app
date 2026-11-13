@@ -147,7 +147,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           : RefreshIndicator(
               onRefresh: _load,
               child: ResponsiveBody(
+                padding: EdgeInsets.fromLTRB(
+                  context.isWide ? 28 : (context.isTablet ? 20 : 16),
+                  6,
+                  context.isWide ? 28 : (context.isTablet ? 20 : 16),
+                  12,
+                ),
                 child: ListView(
+                  padding: EdgeInsets.zero,
                   children: [
                     if (_error != null)
                       Padding(
@@ -157,100 +164,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           style: AppTheme.body(color: Colors.red, size: 13),
                         ),
                       ),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: AspectRatio(
-                        aspectRatio: context.isPhone ? 16 / 10 : 21 / 9,
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            Image(
-                              image: bannerUrl != null
-                                  ? NetworkImage(bannerUrl)
-                                  : const AssetImage(
-                                      'assets/images/family-banner-default.png',
-                                    ) as ImageProvider,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => Image.asset(
-                                'assets/images/family-banner-default.png',
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                            DecoratedBox(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: bannerUrl != null
-                                      ? [
-                                          Colors.black.withValues(alpha: 0.65),
-                                          Colors.black.withValues(alpha: 0.15),
-                                          Colors.transparent,
-                                        ]
-                                      : [
-                                          Colors.white.withValues(alpha: 0.94),
-                                          Colors.white.withValues(alpha: 0.55),
-                                          Colors.transparent,
-                                        ],
-                                ),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: ConstrainedBox(
-                                  constraints:
-                                      const BoxConstraints(maxWidth: 420),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Welcome back, ${auth.user?.name ?? 'there'}',
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: AppTheme.display(
-                                          size: context.isPhone ? 20 : 24,
-                                          color: bannerUrl != null
-                                              ? Colors.white
-                                              : AppTheme.ink,
-                                        ),
-                                      ),
-                                      if (family?.name != null) ...[
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          family!.name,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: AppTheme.body(
-                                            weight: FontWeight.w700,
-                                            color: bannerUrl != null
-                                                ? const Color(0xFFD1FAE5)
-                                                : AppTheme.emerald600,
-                                          ),
-                                        ),
-                                      ],
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        '“Family is not an important thing, it\'s everything.”',
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: AppTheme.body(
-                                          size: 12,
-                                          color: bannerUrl != null
-                                              ? Colors.white
-                                                  .withValues(alpha: 0.9)
-                                              : AppTheme.mutedSoft,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    _DashboardHero(
+                      familyName: family?.name,
+                      userName: auth.user?.name,
+                      bannerUrl: bannerUrl,
                     ),
                     if (_invites.isNotEmpty) ...[
                       const SizedBox(height: 14),
@@ -496,6 +413,171 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
             ),
+    );
+  }
+}
+
+/// Proper welcome card: opaque text panel + right-side banner art only.
+/// Default PNG has baked "Ankesh Prasad" on the left — that side is never shown.
+class _DashboardHero extends StatelessWidget {
+  const _DashboardHero({
+    required this.userName,
+    this.familyName,
+    this.bannerUrl,
+  });
+
+  final String? userName;
+  final String? familyName;
+  final String? bannerUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final phone = context.isPhone;
+    final usingFamilyPhoto = bannerUrl != null;
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFD1FAE5)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF3D2914).withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              flex: phone ? 58 : 52,
+              child: Container(
+                color: usingFamilyPhoto
+                    ? const Color(0xFF0F172A)
+                    : Colors.white,
+                padding: EdgeInsets.fromLTRB(
+                  phone ? 14 : 20,
+                  phone ? 12 : 16,
+                  phone ? 8 : 12,
+                  phone ? 12 : 16,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Welcome back, ${userName ?? 'there'}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTheme.display(
+                        size: phone ? 18 : 22,
+                        color: usingFamilyPhoto
+                            ? Colors.white
+                            : const Color(0xFF1E293B),
+                      ),
+                    ),
+                    if (familyName != null &&
+                        familyName!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        familyName!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTheme.body(
+                          size: 12,
+                          weight: FontWeight.w700,
+                          color: usingFamilyPhoto
+                              ? const Color(0xFFD1FAE5)
+                              : AppTheme.emerald600,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 5),
+                    Text(
+                      '“Family is not an important thing, it\'s everything.”',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTheme.body(
+                        size: 11,
+                        color: usingFamilyPhoto
+                            ? Colors.white.withValues(alpha: 0.9)
+                            : const Color(0xFF475569),
+                      ).copyWith(fontStyle: FontStyle.italic),
+                    ),
+                    if (!phone) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Manage your family, preserve your roots, and keep everyone connected.',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTheme.body(
+                          size: 11,
+                          color: usingFamilyPhoto
+                              ? Colors.white.withValues(alpha: 0.8)
+                              : const Color(0xFF64748B),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            Expanded(
+              flex: phone ? 42 : 48,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: phone ? 112 : 132),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Image(
+                      image: usingFamilyPhoto
+                          ? NetworkImage(bannerUrl!)
+                          : const AssetImage(
+                              'assets/images/family-banner-default.png',
+                            ) as ImageProvider,
+                      fit: BoxFit.cover,
+                      alignment: usingFamilyPhoto
+                          ? Alignment.center
+                          : Alignment.centerRight,
+                      errorBuilder: (_, __, ___) => Image.asset(
+                        'assets/images/family-banner-default.png',
+                        fit: BoxFit.cover,
+                        alignment: Alignment.centerRight,
+                      ),
+                    ),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                          colors: usingFamilyPhoto
+                              ? [
+                                  const Color(0xFF0F172A),
+                                  const Color(0xFF0F172A)
+                                      .withValues(alpha: 0.35),
+                                  Colors.transparent,
+                                ]
+                              : [
+                                  Colors.white,
+                                  Colors.white.withValues(alpha: 0.55),
+                                  Colors.transparent,
+                                ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

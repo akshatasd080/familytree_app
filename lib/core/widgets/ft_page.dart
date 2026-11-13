@@ -31,26 +31,29 @@ class FtPage extends StatelessWidget {
         children: [
           SafeArea(
             bottom: false,
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(canOpenDrawer ? 4 : 12, 4, 8, 4),
-              child: Row(
-                children: [
-                  if (canOpenDrawer)
-                    IconButton(
-                      tooltip: 'Menu',
-                      onPressed: () => Scaffold.of(context).openDrawer(),
-                      icon: const Icon(Icons.menu_rounded),
+            child: SizedBox(
+              height: 48,
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(canOpenDrawer ? 2 : 12, 0, 6, 0),
+                child: Row(
+                  children: [
+                    if (canOpenDrawer)
+                      IconButton(
+                        tooltip: 'Menu',
+                        onPressed: () => Scaffold.of(context).openDrawer(),
+                        icon: const Icon(Icons.menu_rounded),
+                      ),
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTheme.display(size: 20),
+                      ),
                     ),
-                  Expanded(
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTheme.display(size: 20),
-                    ),
-                  ),
-                  ...?actions,
-                ],
+                    ...?actions,
+                  ],
+                ),
               ),
             ),
           ),
