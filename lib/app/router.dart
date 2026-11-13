@@ -127,3 +127,17 @@ GoRouter createRouter(AuthProvider auth) {
 extension AuthRouterX on BuildContext {
   AuthProvider get auth => read<AuthProvider>();
 }
+
+/// In-app navigation that keeps a back stack (phone back → previous screen).
+extension ShellNavX on BuildContext {
+  void openShell(String path) {
+    final loc = GoRouterState.of(this).matchedLocation;
+    if (loc == path) return;
+    // Dashboard is the root — clear stack so back from home can exit.
+    if (path == '/dashboard') {
+      go('/dashboard');
+      return;
+    }
+    push(path);
+  }
+}

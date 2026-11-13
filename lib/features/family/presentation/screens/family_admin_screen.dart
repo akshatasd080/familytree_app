@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../app/router.dart';
 import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
 import '../../../../core/widgets/ft_page.dart';
@@ -83,7 +84,7 @@ class _FamilyAdminScreenState extends State<FamilyAdminScreen> {
           _allowed = false;
           _loading = false;
         });
-        if (mounted) context.go('/family/tree');
+        if (mounted) context.openShell('/family/tree');
         return;
       }
       _name.text = (family['name'] ?? '').toString();

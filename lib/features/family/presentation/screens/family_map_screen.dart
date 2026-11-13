@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../app/router.dart';
 import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
 import '../../../../core/widgets/ft_page.dart';
@@ -385,7 +386,7 @@ class _FamilyMapScreenState extends State<FamilyMapScreen> {
                                             const Color(0xFF0284C7),
                                       ),
                                       onPressed: () =>
-                                          context.go('/family/members'),
+                                          context.openShell('/family/members'),
                                       child: const Text(
                                         'Add member location',
                                       ),
@@ -506,7 +507,7 @@ class _FamilyMapScreenState extends State<FamilyMapScreen> {
                                       ),
                                       TextButton(
                                         onPressed: () =>
-                                            context.go('/family/profile'),
+                                            context.openShell('/family/profile'),
                                         child: const Text(
                                           'Add location from Profile',
                                         ),
@@ -647,7 +648,7 @@ class _FamilyMapScreenState extends State<FamilyMapScreen> {
                                   alignment: Alignment.centerLeft,
                                   child: TextButton(
                                     onPressed: () =>
-                                        context.go('/family/members'),
+                                        context.openShell('/family/members'),
                                     child: const Text(
                                       'Add locations from Members',
                                     ),

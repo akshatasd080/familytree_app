@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../app/router.dart';
 import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
 import '../../../../core/widgets/ft_page.dart';
@@ -306,32 +307,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           (
                             Icons.account_tree,
                             'Tree',
-                            () => context.go('/family/tree')
+                            () => context.openShell('/family/tree')
                           ),
                           (
                             Icons.groups,
                             'Members',
-                            () => context.go('/family/members')
+                            () => context.openShell('/family/members')
                           ),
                           (
                             Icons.photo_library,
                             'Media',
-                            () => context.go('/family/media')
+                            () => context.openShell('/family/media')
                           ),
                           (
                             Icons.event,
                             'Events',
-                            () => context.go('/family/events')
+                            () => context.openShell('/family/events')
                           ),
                           (
                             Icons.map_outlined,
                             'Map',
-                            () => context.go('/family/map')
+                            () => context.openShell('/family/map')
                           ),
                           (
                             Icons.person,
                             'Profile',
-                            () => context.go('/family/profile')
+                            () => context.openShell('/family/profile')
                           ),
                         ];
                         return Wrap(
@@ -362,7 +363,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ),
                               ),
                               TextButton(
-                                onPressed: () => context.go('/family/tree'),
+                                onPressed: () =>
+                                    context.openShell('/family/tree'),
                                 child: Text(
                                   'Open tree',
                                   style: AppTheme.body(

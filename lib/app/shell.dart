@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -6,6 +7,7 @@ import '../features/auth/presentation/providers/auth_providers.dart';
 import '../features/auth/presentation/widgets/set_initial_password_dialog.dart';
 import '../features/family/presentation/providers/family_providers.dart';
 import '../features/settings/presentation/providers/theme_settings_provider.dart';
+import 'router.dart';
 import 'theme.dart';
 
 class AppShell extends StatefulWidget {
@@ -44,43 +46,60 @@ class _AppShellState extends State<AppShell> {
     context.watch<ThemeSettingsProvider>();
     final wide = MediaQuery.sizeOf(context).width >= 840;
 
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: AppTheme.shellBg,
-      drawer: wide
-          ? null
-          : _AppDrawer(
-              familyName: family.current?.name ?? 'Family Tree',
-              userName: auth.user?.name ?? '',
-              showAdminFamilies: auth.hasPermission('family.read'),
-              onLogout: () async {
-                await auth.logout();
-                if (context.mounted) context.go('/login');
-              },
-            ),
-      body: Row(
-        children: [
-          if (wide)
-            SizedBox(
-              width: 240,
-              child: Material(
-                elevation: 0,
-                color: AppTheme.drawerBg,
-                child: _AppDrawer(
-                  familyName: family.current?.name ?? 'Family Tree',
-                  userName: auth.user?.name ?? '',
-                  showAdminFamilies: auth.hasPermission('family.read'),
-                  permanent: true,
-                  onLogout: () async {
-                    await auth.logout();
-                    if (context.mounted) context.go('/login');
-                  },
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        final router = GoRouter.of(context);
+        if (router.canPop()) {
+          router.pop();
+          return;
+        }
+        final loc = GoRouterState.of(context).matchedLocation;
+        if (loc != '/dashboard') {
+          context.go('/dashboard');
+          return;
+        }
+        SystemNavigator.pop();
+      },
+      child: Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: AppTheme.shellBg,
+        drawer: wide
+            ? null
+            : _AppDrawer(
+                familyName: family.current?.name ?? 'Family Tree',
+                userName: auth.user?.name ?? '',
+                showAdminFamilies: auth.hasPermission('family.read'),
+                onLogout: () async {
+                  await auth.logout();
+                  if (context.mounted) context.go('/login');
+                },
+              ),
+        body: Row(
+          children: [
+            if (wide)
+              SizedBox(
+                width: 240,
+                child: Material(
+                  elevation: 0,
+                  color: AppTheme.drawerBg,
+                  child: _AppDrawer(
+                    familyName: family.current?.name ?? 'Family Tree',
+                    userName: auth.user?.name ?? '',
+                    showAdminFamilies: auth.hasPermission('family.read'),
+                    permanent: true,
+                    onLogout: () async {
+                      await auth.logout();
+                      if (context.mounted) context.go('/login');
+                    },
+                  ),
                 ),
               ),
-            ),
-          if (wide) VerticalDivider(width: 1, color: AppTheme.borderSoft),
-          Expanded(child: widget.child),
-        ],
+            if (wide) VerticalDivider(width: 1, color: AppTheme.borderSoft),
+            Expanded(child: widget.child),
+          ],
+        ),
       ),
     );
   }
@@ -215,7 +234,7 @@ class _AppDrawer extends StatelessWidget {
         ),
         onTap: () {
           if (!permanent) Navigator.pop(context);
-          context.go(path);
+          context.openShell(path);
         },
       ),
     );
