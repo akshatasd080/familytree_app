@@ -341,7 +341,7 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
                           border: Border.all(color: AppTheme.borderSoft),
                         ),
                         child: _photoPath == null
-                            ? const Center(
+                            ? Center(
                                 child: Text(
                                   'Photo',
                                   style: TextStyle(

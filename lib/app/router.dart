@@ -18,6 +18,7 @@ import '../features/family/presentation/screens/family_verify_otp_screen.dart';
 import '../features/home/presentation/screens/dashboard_screen.dart';
 import '../features/home/presentation/screens/public_home_screen.dart';
 import '../features/admin/presentation/screens/admin_families_screen.dart';
+import '../features/settings/presentation/screens/theme_settings_screen.dart';
 import 'shell.dart';
 
 GoRouter createRouter(AuthProvider auth) {
@@ -112,6 +113,10 @@ GoRouter createRouter(AuthProvider auth) {
           GoRoute(
             path: '/admin/families',
             builder: (_, __) => const AdminFamiliesScreen(),
+          ),
+          GoRoute(
+            path: '/settings',
+            builder: (_, __) => const ThemeSettingsScreen(),
           ),
         ],
       ),

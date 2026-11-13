@@ -301,7 +301,7 @@ class _FamilyMapScreenState extends State<FamilyMapScreen> {
                         left: 10,
                         right: 10,
                         child: Material(
-                          color: Colors.white.withValues(alpha: 0.96),
+                          color: AppTheme.card.withValues(alpha: 0.96),
                           elevation: 2,
                           borderRadius: BorderRadius.circular(12),
                           child: Padding(
@@ -311,7 +311,7 @@ class _FamilyMapScreenState extends State<FamilyMapScreen> {
                             ),
                             child: Row(
                               children: [
-                                const Icon(
+                                Icon(
                                   Icons.sensors,
                                   size: 16,
                                   color: AppTheme.forest,
@@ -350,7 +350,7 @@ class _FamilyMapScreenState extends State<FamilyMapScreen> {
                           child: ConstrainedBox(
                             constraints: const BoxConstraints(maxWidth: 320),
                             child: Material(
-                              color: Colors.white,
+                              color: AppTheme.card,
                               elevation: 6,
                               borderRadius: BorderRadius.circular(18),
                               child: Padding(
@@ -420,7 +420,7 @@ class _FamilyMapScreenState extends State<FamilyMapScreen> {
                 Expanded(
                   flex: 42,
                   child: Material(
-                    color: Colors.white,
+                    color: AppTheme.card,
                     elevation: 8,
                     child: Column(
                       children: [

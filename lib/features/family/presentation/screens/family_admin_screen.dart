@@ -181,7 +181,7 @@ class _FamilyAdminScreenState extends State<FamilyAdminScreen> {
                                 else
                                   Container(
                                     color: const Color(0xFFECFDF5),
-                                    child: const Icon(
+                                    child: Icon(
                                       Icons.park,
                                       size: 48,
                                       color: AppTheme.forest,

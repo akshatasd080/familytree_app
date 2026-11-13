@@ -331,7 +331,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                   child: Material(
                                     elevation: 8,
                                     borderRadius: BorderRadius.circular(16),
-                                    color: Colors.white,
+                                    color: AppTheme.card,
                                     child: ListTile(
                                       shape: RoundedRectangleBorder(
                                         borderRadius:

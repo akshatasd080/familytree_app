@@ -41,7 +41,7 @@ class FtPage extends StatelessWidget {
                       IconButton(
                         tooltip: 'Menu',
                         onPressed: () => Scaffold.of(context).openDrawer(),
-                        icon: const Icon(Icons.menu_rounded),
+                        icon: Icon(Icons.menu_rounded, color: AppTheme.ink),
                       ),
                     Expanded(
                       child: Text(
@@ -57,7 +57,7 @@ class FtPage extends StatelessWidget {
               ),
             ),
           ),
-          const Divider(height: 1),
+          Divider(height: 1, color: AppTheme.borderSoft),
           Expanded(
             child: Stack(
               children: [

@@ -6,6 +6,7 @@ import '../core/network/api_client.dart';
 import '../features/auth/presentation/providers/auth_providers.dart';
 import '../features/family/data/family_api_service.dart';
 import '../features/family/presentation/providers/family_providers.dart';
+import '../features/settings/presentation/providers/theme_settings_provider.dart';
 import 'router.dart';
 import 'theme.dart';
 
@@ -21,6 +22,7 @@ class _FamilyTreeAppState extends State<FamilyTreeApp> {
   late final AuthProvider _auth;
   late final FamilyApiService _familyApi;
   late final FamilySessionProvider _familySession;
+  late final ThemeSettingsProvider _theme;
   late final GoRouter _router;
 
   @override
@@ -34,6 +36,7 @@ class _FamilyTreeAppState extends State<FamilyTreeApp> {
     _auth = AuthProvider(_api);
     _familyApi = FamilyApiService(_api);
     _familySession = FamilySessionProvider(_familyApi);
+    _theme = ThemeSettingsProvider();
     _router = createRouter(_auth);
     _auth.restoreSession();
   }
@@ -46,12 +49,20 @@ class _FamilyTreeAppState extends State<FamilyTreeApp> {
         Provider.value(value: _familyApi),
         ChangeNotifierProvider.value(value: _auth),
         ChangeNotifierProvider.value(value: _familySession),
+        ChangeNotifierProvider.value(value: _theme),
       ],
-      child: MaterialApp.router(
-        title: 'Family Tree',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.light,
-        routerConfig: _router,
+      child: Consumer<ThemeSettingsProvider>(
+        builder: (context, theme, _) {
+          AppTheme.apply(isDark: theme.isDark, accent: theme.accent);
+          return MaterialApp.router(
+            title: 'Family Tree',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light,
+            darkTheme: AppTheme.dark,
+            themeMode: theme.themeMode,
+            routerConfig: _router,
+          );
+        },
       ),
     );
   }

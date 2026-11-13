@@ -198,7 +198,7 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.card,
       showDragHandle: true,
       builder: (ctx) {
         var likes = _likes(item);
@@ -403,7 +403,7 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 12),
                               child: Material(
-                                color: Colors.white,
+                                color: AppTheme.card,
                                 borderRadius: BorderRadius.circular(16),
                                 child: InkWell(
                                   onTap: () => _openPost(item),

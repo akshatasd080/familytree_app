@@ -384,7 +384,7 @@ class _FamilyEventsScreenState extends State<FamilyEventsScreen> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: AppTheme.card,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(color: AppTheme.borderSoft),
                     ),

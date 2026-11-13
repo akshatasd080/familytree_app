@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../features/auth/presentation/providers/auth_providers.dart';
 import '../features/auth/presentation/widgets/set_initial_password_dialog.dart';
 import '../features/family/presentation/providers/family_providers.dart';
+import '../features/settings/presentation/providers/theme_settings_provider.dart';
 import 'theme.dart';
 
 class AppShell extends StatefulWidget {
@@ -40,6 +41,7 @@ class _AppShellState extends State<AppShell> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final family = context.watch<FamilySessionProvider>();
+    context.watch<ThemeSettingsProvider>();
     final wide = MediaQuery.sizeOf(context).width >= 840;
 
     return Scaffold(
@@ -63,7 +65,7 @@ class _AppShellState extends State<AppShell> {
               width: 240,
               child: Material(
                 elevation: 0,
-                color: Colors.white,
+                color: AppTheme.drawerBg,
                 child: _AppDrawer(
                   familyName: family.current?.name ?? 'Family Tree',
                   userName: auth.user?.name ?? '',
@@ -76,7 +78,7 @@ class _AppShellState extends State<AppShell> {
                 ),
               ),
             ),
-          if (wide) const VerticalDivider(width: 1),
+          if (wide) VerticalDivider(width: 1, color: AppTheme.borderSoft),
           Expanded(child: widget.child),
         ],
       ),
@@ -101,55 +103,72 @@ class _AppDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final content = ListView(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+    final content = Column(
       children: [
-        ListTile(
-          title: Text(familyName, style: AppTheme.display(size: 20)),
-          subtitle: Text(
-            userName,
-            style: AppTheme.body(size: 14, color: AppTheme.muted),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            children: [
+              ListTile(
+                title: Text(familyName, style: AppTheme.display(size: 20)),
+                subtitle: Text(
+                  userName,
+                  style: AppTheme.body(size: 14, color: AppTheme.muted),
+                ),
+                leading: CircleAvatar(
+                  radius: 22,
+                  backgroundColor: AppTheme.forest.withValues(alpha: 0.16),
+                  child: Icon(Icons.park, color: AppTheme.forest, size: 24),
+                ),
+              ),
+              const Divider(),
+              _item(context, Icons.dashboard, 'Dashboard', '/dashboard'),
+              _item(context, Icons.groups, 'Members', '/family/members'),
+              _item(context, Icons.account_tree, 'Tree', '/family/tree'),
+              _item(context, Icons.photo_library, 'Media', '/family/media'),
+              _item(context, Icons.person, 'Profile', '/family/profile'),
+              _item(context, Icons.map_outlined, 'Map', '/family/map'),
+              _item(context, Icons.event, 'Events', '/family/events'),
+              _item(
+                context,
+                Icons.admin_panel_settings_outlined,
+                'Family Admin',
+                '/family/admin',
+              ),
+              _item(
+                context,
+                Icons.privacy_tip_outlined,
+                'Privacy',
+                '/family/privacy',
+              ),
+              if (showAdminFamilies)
+                _item(
+                  context,
+                  Icons.diversity_3,
+                  'All Families',
+                  '/admin/families',
+                ),
+            ],
           ),
-          leading: const CircleAvatar(
-            radius: 22,
-            backgroundColor: AppTheme.emerald100,
-            child: Icon(Icons.park, color: AppTheme.forest, size: 24),
-          ),
         ),
-        const Divider(),
-        _item(context, Icons.dashboard, 'Dashboard', '/dashboard'),
-        _item(context, Icons.groups, 'Members', '/family/members'),
-        _item(context, Icons.account_tree, 'Tree', '/family/tree'),
-        _item(context, Icons.photo_library, 'Media', '/family/media'),
-        _item(context, Icons.person, 'Profile', '/family/profile'),
-        _item(context, Icons.map_outlined, 'Map', '/family/map'),
-        _item(context, Icons.event, 'Events', '/family/events'),
-        _item(
-          context,
-          Icons.admin_panel_settings_outlined,
-          'Family Admin',
-          '/family/admin',
-        ),
-        _item(
-          context,
-          Icons.privacy_tip_outlined,
-          'Privacy',
-          '/family/privacy',
-        ),
-        if (showAdminFamilies)
-          _item(context, Icons.diversity_3, 'All Families', '/admin/families'),
-        const Divider(),
+        const Divider(height: 1),
+        _item(context, Icons.settings_outlined, 'Settings', '/settings'),
         ListTile(
           leading: const Icon(Icons.logout, color: Colors.redAccent, size: 22),
           title: Text(
             'Logout',
-            style: AppTheme.body(size: 16, weight: FontWeight.w700),
+            style: AppTheme.body(
+              size: 16,
+              weight: FontWeight.w700,
+              color: Colors.redAccent,
+            ),
           ),
           onTap: () {
             if (!permanent) Navigator.pop(context);
             onLogout();
           },
         ),
+        const SizedBox(height: 8),
       ],
     );
 
@@ -158,7 +177,7 @@ class _AppDrawer extends StatelessWidget {
     }
     return Drawer(
       width: MediaQuery.sizeOf(context).width * 0.72,
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.drawerBg,
       child: SafeArea(child: content),
     );
   }
@@ -191,7 +210,7 @@ class _AppDrawer extends StatelessWidget {
           style: AppTheme.body(
             size: 16,
             weight: FontWeight.w700,
-            color: active ? Colors.white : const Color(0xFF334155),
+            color: active ? Colors.white : AppTheme.inkSoft,
           ),
         ),
         onTap: () {

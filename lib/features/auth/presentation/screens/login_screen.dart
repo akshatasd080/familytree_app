@@ -333,7 +333,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: AppTheme.borderSoft),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.home_outlined,
                           color: AppTheme.ink,
                         ),
@@ -377,7 +377,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 child: Image.asset(
                                   'assets/images/family-tree-labeled.png',
                                   fit: BoxFit.contain,
-                                  errorBuilder: (_, __, ___) => const Center(
+                                  errorBuilder: (_, __, ___) => Center(
                                     child: Icon(
                                       Icons.park,
                                       size: 64,
@@ -402,7 +402,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(
+                                  Icon(
                                     Icons.park,
                                     size: 14,
                                     color: AppTheme.forest,

@@ -48,12 +48,12 @@ class FtSectionCard extends StatelessWidget {
       width: double.infinity,
       padding: padding,
       decoration: BoxDecoration(
-        color: color ?? Colors.white,
+        color: color ?? AppTheme.card,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: borderColor ?? AppTheme.borderSoft),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF3D2914).withValues(alpha: 0.06),
+            color: AppTheme.ink.withValues(alpha: AppTheme.isDark ? 0.35 : 0.06),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -82,35 +82,36 @@ class FtStatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = AppTheme.isDark;
     final colors = switch (tone) {
       FtStatTone.green => (
-          bg: const Color(0xFFECFDF5),
-          border: const Color(0xFFD1FAE5),
-          iconBg: const Color(0xFFD1FAE5),
+          bg: dark ? const Color(0xFF143028) : const Color(0xFFECFDF5),
+          border: dark ? const Color(0xFF1F4A3A) : const Color(0xFFD1FAE5),
+          iconBg: dark ? const Color(0xFF1F4A3A) : const Color(0xFFD1FAE5),
           icon: const Color(0xFF059669),
         ),
       FtStatTone.purple => (
-          bg: const Color(0xFFF5F3FF),
-          border: const Color(0xFFEDE9FE),
-          iconBg: const Color(0xFFEDE9FE),
+          bg: dark ? const Color(0xFF241B3A) : const Color(0xFFF5F3FF),
+          border: dark ? const Color(0xFF35285A) : const Color(0xFFEDE9FE),
+          iconBg: dark ? const Color(0xFF35285A) : const Color(0xFFEDE9FE),
           icon: const Color(0xFF7C3AED),
         ),
       FtStatTone.blue => (
-          bg: const Color(0xFFF0F9FF),
-          border: const Color(0xFFE0F2FE),
-          iconBg: const Color(0xFFE0F2FE),
+          bg: dark ? const Color(0xFF152636) : const Color(0xFFF0F9FF),
+          border: dark ? const Color(0xFF1F3A50) : const Color(0xFFE0F2FE),
+          iconBg: dark ? const Color(0xFF1F3A50) : const Color(0xFFE0F2FE),
           icon: const Color(0xFF0284C7),
         ),
       FtStatTone.orange => (
-          bg: const Color(0xFFFFF7ED),
-          border: const Color(0xFFFFEDD5),
-          iconBg: const Color(0xFFFFEDD5),
+          bg: dark ? const Color(0xFF2A1E14) : const Color(0xFFFFF7ED),
+          border: dark ? const Color(0xFF3F2C1C) : const Color(0xFFFFEDD5),
+          iconBg: dark ? const Color(0xFF3F2C1C) : const Color(0xFFFFEDD5),
           icon: const Color(0xFFEA580C),
         ),
       FtStatTone.red => (
-          bg: const Color(0xFFFFF1F2),
-          border: const Color(0xFFFFE4E6),
-          iconBg: const Color(0xFFFFE4E6),
+          bg: dark ? const Color(0xFF2A151A) : const Color(0xFFFFF1F2),
+          border: dark ? const Color(0xFF3F2028) : const Color(0xFFFFE4E6),
+          iconBg: dark ? const Color(0xFF3F2028) : const Color(0xFFFFE4E6),
           icon: const Color(0xFFE11D48),
         ),
     };

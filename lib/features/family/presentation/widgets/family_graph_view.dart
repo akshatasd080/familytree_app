@@ -255,7 +255,7 @@ class _FamilyGraphViewState extends State<FamilyGraphView> {
               right: 10,
               bottom: 10,
               child: Material(
-                color: Colors.white.withValues(alpha: 0.96),
+                color: AppTheme.card.withValues(alpha: 0.96),
                 elevation: 3,
                 borderRadius: BorderRadius.circular(12),
                 child: Padding(
@@ -411,7 +411,7 @@ class _MemberNode extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppTheme.card,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isMe
@@ -452,7 +452,7 @@ class _MemberNode extends StatelessWidget {
                                   member.name.isNotEmpty
                                       ? member.name[0].toUpperCase()
                                       : '?',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w800,
                                     color: AppTheme.forest,
@@ -569,7 +569,7 @@ class _MemberNode extends StatelessWidget {
                 _NodeAction(
                   icon: Icons.person_outline,
                   color: const Color(0xFF475569),
-                  bg: Colors.white,
+                  bg: AppTheme.card,
                   border: AppTheme.borderSoft,
                   onTap: onTap,
                 ),

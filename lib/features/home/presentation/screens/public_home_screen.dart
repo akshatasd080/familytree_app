@@ -60,7 +60,7 @@ class PublicHomeScreen extends StatelessWidget {
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Container(
                         color: AppTheme.cream,
-                        child: const Icon(Icons.park,
+                        child: Icon(Icons.park,
                             size: 72, color: AppTheme.forest),
                       ),
                     ),

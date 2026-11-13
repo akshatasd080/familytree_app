@@ -348,7 +348,7 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
                       hintText: 'Search members…',
                       prefixIcon: const Icon(Icons.search),
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: AppTheme.card,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
                         borderSide: BorderSide.none,
@@ -637,7 +637,7 @@ class _MemberCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
-        color: Colors.white,
+        color: AppTheme.card,
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           onTap: onTap,

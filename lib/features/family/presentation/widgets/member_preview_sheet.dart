@@ -84,7 +84,7 @@ class _MemberPreviewSheet extends StatelessWidget {
             maxHeight: MediaQuery.sizeOf(context).height * 0.88,
           ),
           child: Material(
-            color: Colors.white,
+            color: AppTheme.card,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
             clipBehavior: Clip.antiAlias,
             child: Column(

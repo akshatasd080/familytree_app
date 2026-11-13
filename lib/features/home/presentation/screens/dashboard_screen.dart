@@ -190,7 +190,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   width: double.infinity,
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: Colors.white,
+                                    color: AppTheme.card,
                                     borderRadius: BorderRadius.circular(12),
                                     border:
                                         Border.all(color: AppTheme.amber200),
@@ -421,7 +421,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ),
                                 child: Row(
                                   children: [
-                                    const Icon(
+                                    Icon(
                                       Icons.notifications_outlined,
                                       color: AppTheme.forest,
                                       size: 18,
@@ -472,7 +472,7 @@ class _DashboardHero extends StatelessWidget {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.card,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: const Color(0xFFD1FAE5)),
         boxShadow: [
@@ -626,7 +626,7 @@ class _ActionChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: AppTheme.card,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,
@@ -725,7 +725,7 @@ class _MiniNode extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppTheme.card,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isMe ? AppTheme.forest : AppTheme.borderSoft,

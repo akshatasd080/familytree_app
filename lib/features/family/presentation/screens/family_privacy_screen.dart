@@ -17,7 +17,7 @@ class FamilyPrivacyScreen extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppTheme.card,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: AppTheme.borderSoft),
           ),
