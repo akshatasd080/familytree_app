@@ -1,0 +1,27 @@
+Family Tree — Play Store upload checklist
+=========================================
+
+App ID (applicationId): com.familytree.app
+App name: Family Tree
+Version: see pubspec.yaml (1.0.0+1)  →  bump +N for every new upload
+Upload keystore: android/app/upload-keystore.jks
+Key alias: upload
+Passwords: android/key.properties  (NEVER commit / NEVER lose this file)
+
+1) Set production API (HTTPS required for public users):
+   flutter build appbundle --release --dart-define=API_BASE_URL=https://YOUR_DOMAIN/api
+
+2) Output AAB:
+   build/app/outputs/bundle/release/app-release.aab
+
+3) Play Console:
+   - Create app → package com.familytree.app
+   - Upload AAB under Production / Testing
+   - Store listing: title, short/full description, screenshots, icon_512.png
+   - Privacy policy URL (required if login / photos)
+   - Data safety form (collects account, photos, location city for map)
+
+4) Keep a backup of:
+   - upload-keystore.jks
+   - key.properties
+   Losing these means you cannot update the same Play listing.
