@@ -356,16 +356,26 @@ class _FamilyEventsScreenState extends State<FamilyEventsScreen> {
                   ),
                   Wrap(
                     spacing: 8,
+                    runSpacing: 8,
                     children: [
                       for (final k in _kinds)
                         Chip(
+                          backgroundColor:
+                              _kindColor(k).withValues(alpha: 0.14),
+                          side: BorderSide(
+                            color: _kindColor(k).withValues(alpha: 0.45),
+                          ),
                           avatar: CircleAvatar(
                             backgroundColor: _kindColor(k),
                             radius: 6,
                           ),
                           label: Text(
                             '${k[0].toUpperCase()}${k.substring(1)} · ${_events.where((e) => _kind(e) == k).length}',
-                            style: const TextStyle(fontSize: 11),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: _kindColor(k).withValues(alpha: 1),
+                            ),
                           ),
                         ),
                     ],

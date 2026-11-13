@@ -295,23 +295,57 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       style: AppTheme.body(weight: FontWeight.w800),
                     ),
                     const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _ActionChip(Icons.account_tree, 'Tree',
-                            () => context.go('/family/tree')),
-                        _ActionChip(Icons.groups, 'Members',
-                            () => context.go('/family/members')),
-                        _ActionChip(Icons.photo_library, 'Media',
-                            () => context.go('/family/media')),
-                        _ActionChip(Icons.event, 'Events',
-                            () => context.go('/family/events')),
-                        _ActionChip(Icons.map_outlined, 'Map',
-                            () => context.go('/family/map')),
-                        _ActionChip(Icons.person, 'Profile',
-                            () => context.go('/family/profile')),
-                      ],
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        const gap = 8.0;
+                        const perRow = 3;
+                        final itemWidth =
+                            (constraints.maxWidth - gap * (perRow - 1)) /
+                                perRow;
+                        final actions = <(IconData, String, VoidCallback)>[
+                          (
+                            Icons.account_tree,
+                            'Tree',
+                            () => context.go('/family/tree')
+                          ),
+                          (
+                            Icons.groups,
+                            'Members',
+                            () => context.go('/family/members')
+                          ),
+                          (
+                            Icons.photo_library,
+                            'Media',
+                            () => context.go('/family/media')
+                          ),
+                          (
+                            Icons.event,
+                            'Events',
+                            () => context.go('/family/events')
+                          ),
+                          (
+                            Icons.map_outlined,
+                            'Map',
+                            () => context.go('/family/map')
+                          ),
+                          (
+                            Icons.person,
+                            'Profile',
+                            () => context.go('/family/profile')
+                          ),
+                        ];
+                        return Wrap(
+                          spacing: gap,
+                          runSpacing: gap,
+                          children: [
+                            for (final a in actions)
+                              SizedBox(
+                                width: itemWidth,
+                                child: _ActionChip(a.$1, a.$2, a.$3),
+                              ),
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 16),
                     FtSectionCard(
@@ -591,30 +625,33 @@ class _ActionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final w = context.isPhone ? 96.0 : 110.0;
-    return InkWell(
-      onTap: onTap,
+    return Material(
+      color: Colors.white,
       borderRadius: BorderRadius.circular(14),
-      child: Ink(
-        width: w,
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppTheme.borderSoft),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: AppTheme.forest, size: 22),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTheme.body(weight: FontWeight.w600, size: 12),
-            ),
-          ],
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Ink(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppTheme.borderSoft),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: AppTheme.forest, size: 22),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: AppTheme.body(weight: FontWeight.w700, size: 12),
+              ),
+            ],
+          ),
         ),
       ),
     );
