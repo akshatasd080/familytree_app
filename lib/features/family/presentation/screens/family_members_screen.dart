@@ -37,10 +37,28 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
   List<Map<String, dynamic>> _joinRequests = const [];
   List<Map<String, dynamic>> _pendingInvites = const [];
   List<Map<String, dynamic>> _myInvites = const [];
+  List<Map<String, dynamic>> _linkRequests = const [];
+  List<Map<String, dynamic>> _linkResults = const [];
   final _search = TextEditingController();
+  final _linkQuery = TextEditingController();
   String _query = '';
   bool _loading = true;
+  bool _linkBusy = false;
   String? _error;
+
+  bool get _isAdmin {
+    final role =
+        (context.read<FamilySessionProvider>().current?.role ?? '')
+            .toLowerCase();
+    final rel = (context.read<FamilySessionProvider>().current?.relationship ??
+            '')
+        .toLowerCase()
+        .replaceAll(' ', '');
+    return role == 'admin' ||
+        role == 'creator' ||
+        role == 'owner' ||
+        rel == 'sitecreator';
+  }
 
   @override
   void initState() {
@@ -51,6 +69,7 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
   @override
   void dispose() {
     _search.dispose();
+    _linkQuery.dispose();
     super.dispose();
   }
 
@@ -142,6 +161,27 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
       } catch (_) {
         _myInvites = const [];
       }
+
+      if (_isAdmin) {
+        try {
+          final links = await api.listFamilyLinkRequests(familyId);
+          final ldata = links.data;
+          List llist = const [];
+          if (ldata is Map && ldata['requests'] is List) {
+            llist = ldata['requests'] as List;
+          } else if (ldata is List) {
+            llist = ldata;
+          }
+          _linkRequests = llist
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        } catch (_) {
+          _linkRequests = const [];
+        }
+      } else {
+        _linkRequests = const [];
+      }
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -157,7 +197,149 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
       member: member,
       familyId: familyId,
       onChanged: _load,
+      isAdmin: _isAdmin,
     );
+  }
+
+  Future<void> _searchLinkFamilies() async {
+    final familyId = context.read<FamilySessionProvider>().familyId;
+    final raw = _linkQuery.text.trim();
+    if (familyId == null || raw.length < 2) return;
+    var digits = raw.replaceAll(RegExp(r'\D'), '');
+    if (digits.length == 12 && digits.startsWith('91')) {
+      digits = digits.substring(2);
+    }
+    if (digits.length == 11 && digits.startsWith('0')) {
+      digits = digits.substring(1);
+    }
+    final looksLikePhone = RegExp(r'^[6-9]\d{9}$').hasMatch(digits);
+    final q = looksLikePhone ? digits : raw;
+    setState(() => _linkBusy = true);
+    try {
+      final res = await context
+          .read<FamilyApiService>()
+          .searchLinkFamilies(familyId, q);
+      final data = res.data;
+      List list = const [];
+      if (data is Map && data['families'] is List) {
+        list = data['families'] as List;
+      }
+      setState(() {
+        _linkResults = list
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      });
+      if (_linkResults.isEmpty && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              looksLikePhone
+                  ? 'No family found for that mobile number'
+                  : 'No families matched your search',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => _linkBusy = false);
+    }
+  }
+
+  Future<void> _requestLink(String otherFamilyId, String absorb) async {
+    final familyId = context.read<FamilySessionProvider>().familyId;
+    if (familyId == null) return;
+    setState(() => _linkBusy = true);
+    try {
+      final res = await context.read<FamilyApiService>().createFamilyLinkRequest(
+            familyId,
+            {'otherFamilyId': otherFamilyId, 'absorb': absorb},
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            (res.data is Map ? res.data['message'] : null)?.toString() ??
+                'Link request sent',
+          ),
+        ),
+      );
+      setState(() {
+        _linkResults = const [];
+        _linkQuery.clear();
+      });
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => _linkBusy = false);
+    }
+  }
+
+  Future<void> _acceptLink(String requestId) async {
+    final session = context.read<FamilySessionProvider>();
+    final api = context.read<FamilyApiService>();
+    final familyId = session.familyId;
+    if (familyId == null) return;
+    setState(() => _linkBusy = true);
+    try {
+      final res = await api.acceptFamilyLinkRequest(familyId, requestId);
+      if (!mounted) return;
+      final nextId = res.data is Map ? res.data['familyId']?.toString() : null;
+      await session.loadMine();
+      if (!mounted) return;
+      if (nextId != null) {
+        final match = session.families.where((f) => f.id == nextId);
+        if (match.isNotEmpty) session.selectFamily(match.first);
+      }
+      await _load();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            (res.data is Map ? res.data['message'] : null)?.toString() ??
+                'Families linked',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => _linkBusy = false);
+    }
+  }
+
+  Future<void> _declineLink(String requestId) async {
+    final familyId = context.read<FamilySessionProvider>().familyId;
+    if (familyId == null) return;
+    try {
+      await context
+          .read<FamilyApiService>()
+          .declineFamilyLinkRequest(familyId, requestId);
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<void> _cancelLink(String requestId) async {
+    final familyId = context.read<FamilySessionProvider>().familyId;
+    if (familyId == null) return;
+    try {
+      await context
+          .read<FamilyApiService>()
+          .cancelFamilyLinkRequest(familyId, requestId);
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
   }
 
   Future<void> _addMember() async {
@@ -377,6 +559,139 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
                       ),
                     ],
                   ),
+                  if (_isAdmin) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      'Link another family',
+                      style: AppTheme.body(weight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Search by family name or mobile to merge trees.',
+                      style: AppTheme.body(size: 12, color: AppTheme.muted),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _linkQuery,
+                            decoration: const InputDecoration(
+                              hintText: 'Family name or mobile',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: _linkBusy ? null : _searchLinkFamilies,
+                          child: _linkBusy
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text('Search'),
+                        ),
+                      ],
+                    ),
+                    ..._linkResults.map((family) {
+                      final id = (family['id'] ?? '').toString();
+                      return Card(
+                        margin: const EdgeInsets.only(top: 8),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                family['name']?.toString() ?? 'Family',
+                                style:
+                                    AppTheme.body(weight: FontWeight.w800),
+                              ),
+                              Text(
+                                '${family['memberCount'] ?? ''} people',
+                                style: AppTheme.body(
+                                  size: 11,
+                                  color: AppTheme.muted,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                children: [
+                                  OutlinedButton(
+                                    onPressed: _linkBusy
+                                        ? null
+                                        : () => _requestLink(id, 'mine'),
+                                    child: const Text('Join their tree'),
+                                  ),
+                                  FilledButton(
+                                    onPressed: _linkBusy
+                                        ? null
+                                        : () => _requestLink(id, 'theirs'),
+                                    child: const Text('Bring them into mine'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                    ..._linkRequests.map((request) {
+                      final id = (request['id'] ?? '').toString();
+                      return Container(
+                        margin: const EdgeInsets.only(top: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.amber50,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppTheme.amber200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              request['summary']?.toString() ??
+                                  'Family link request',
+                              style: AppTheme.body(weight: FontWeight.w700),
+                            ),
+                            Text(
+                              'Asked by ${request['requesterName'] ?? 'someone'}',
+                              style: AppTheme.body(
+                                size: 11,
+                                color: AppTheme.muted,
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                if (request['canAccept'] == true) ...[
+                                  TextButton(
+                                    onPressed: _linkBusy
+                                        ? null
+                                        : () => _acceptLink(id),
+                                    child: const Text('Accept'),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => _declineLink(id),
+                                    child: const Text('Decline'),
+                                  ),
+                                ],
+                                if (request['canCancel'] == true)
+                                  TextButton(
+                                    onPressed: () => _cancelLink(id),
+                                    child: const Text('Cancel'),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
                   if (_myInvites.isNotEmpty) ...[
                     const SizedBox(height: 14),
                     Text(

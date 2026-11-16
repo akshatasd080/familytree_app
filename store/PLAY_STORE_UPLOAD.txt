@@ -1,27 +1,74 @@
-Family Tree — Play Store upload checklist
-=========================================
+Family Tree — Play Store go-live checklist
+==========================================
 
 App ID (applicationId): com.familytree.app
 App name: Family Tree
-Version: see pubspec.yaml (1.0.0+1)  →  bump +N for every new upload
+Version: pubspec.yaml → 1.0.0+1   (bump +N for EVERY new Play upload)
 Upload keystore: android/app/upload-keystore.jks
 Key alias: upload
-Passwords: android/key.properties  (NEVER commit / NEVER lose this file)
+Passwords: android/key.properties   (NEVER commit / NEVER lose — backup offline)
 
-1) Set production API (HTTPS required for public users):
-   flutter build appbundle --release --dart-define=API_BASE_URL=https://YOUR_DOMAIN/api
+------------------------------------------------
+A) Before you upload (code)
+------------------------------------------------
+1. API must be HTTPS production:
+   - lib/core/constants/api_constants.dart → Environment.prod
+   - Or build with:
+     flutter build appbundle --release --dart-define=API_BASE_URL=https://familytree.dhilwari.com/api
 
-2) Output AAB:
+2. Privacy page live on web:
+   - File: famliyTree_frontend/public/privacy.html
+   - URL: https://familytree.dhilwari.com/privacy.html
+   - Deploy frontend so this URL opens in a browser
+
+3. Build the Android App Bundle (AAB):
+   cd familytree_app
+   flutter clean
+   flutter pub get
+   flutter build appbundle --release --dart-define=API_BASE_URL=https://familytree.dhilwari.com/api
+
+4. Output file:
    build/app/outputs/bundle/release/app-release.aab
 
-3) Play Console:
-   - Create app → package com.familytree.app
-   - Upload AAB under Production / Testing
-   - Store listing: title, short/full description, screenshots, icon_512.png
-   - Privacy policy URL (required if login / photos)
-   - Data safety form (collects account, photos, location city for map)
+------------------------------------------------
+B) Play Console setup
+------------------------------------------------
+1. Create developer account (one-time fee) if not done.
+2. Create app → package name MUST be: com.familytree.app
+3. Dashboard → Testing / Production → Create release → upload AAB
+4. Store listing — copy from store/listing/:
+   - title.txt
+   - short_description.txt
+   - full_description.txt
+   - icon: store/icon_512.png
+   - feature graphic: store/feature_graphic.png
+   - phone screenshots: store/screenshots/ (add ≥2 real captures)
+5. App content:
+   - Privacy policy URL: https://familytree.dhilwari.com/privacy.html
+   - Data safety: follow store/listing/data_safety.txt
+   - Content rating: follow store/listing/content_rating.txt
+   - Target audience / news apps / ads declarations as prompted (Ads: No)
+6. App access: if login required for review, add a demo account
+7. Submit for review
 
-4) Keep a backup of:
-   - upload-keystore.jks
-   - key.properties
-   Losing these means you cannot update the same Play listing.
+------------------------------------------------
+C) Assets already prepared in this repo
+------------------------------------------------
+store/
+  icon_512.png
+  feature_graphic.png
+  listing/title.txt
+  listing/short_description.txt
+  listing/full_description.txt
+  listing/data_safety.txt
+  listing/content_rating.txt
+  listing/store_listing_fields.txt
+  screenshots/   ← YOU still need to add real screenshots
+  PLAY_STORE_UPLOAD.txt (this file)
+
+------------------------------------------------
+D) Keep forever (backup)
+------------------------------------------------
+- android/app/upload-keystore.jks
+- android/key.properties
+Losing these means you cannot update the same Play listing.

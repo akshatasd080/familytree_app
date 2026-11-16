@@ -1,0 +1,18 @@
+Play Console → App content → Content ratings (IARC questionnaire guide)
+=======================================================================
+
+Category suggestion: Social / Communication / Lifestyle (Family)
+
+Typical answers for this app:
+- Violence: No
+- Sexual content: No
+- Language: No strong language
+- Controlled substances: No
+- Gambling: No
+- User-generated content: YES (photos, chat, profiles) → moderate / report expectations
+- Account required: YES
+- Shares location: Approximate (city text), not continuous GPS tracking
+- Targets children as primary audience: NO (family organizers / general)
+- Online interaction with other users: YES (family members only)
+
+Expected rating regionally: PEGI 3 / Everyone or similar (confirm after questionnaire).

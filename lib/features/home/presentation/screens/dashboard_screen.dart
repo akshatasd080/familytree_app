@@ -414,34 +414,87 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       const SizedBox(height: 8),
                       ..._notifications.take(6).map(
-                            (n) => Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: FtSectionCard(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.notifications_outlined,
-                                      color: AppTheme.forest,
-                                      size: 18,
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Text(
-                                        (n['message'] ??
-                                                n['title'] ??
-                                                'Notice')
-                                            .toString(),
-                                        style: AppTheme.body(size: 13),
+                            (n) {
+                              final id = (n['id'] ?? '').toString();
+                              final isRead = n['is_read'] == true ||
+                                  n['isRead'] == true;
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    borderRadius: BorderRadius.circular(14),
+                                    onTap: id.isEmpty
+                                        ? null
+                                        : () async {
+                                            final api = context
+                                                .read<FamilyApiService>();
+                                            final messenger =
+                                                ScaffoldMessenger.of(context);
+                                            try {
+                                              await api
+                                                  .markNotificationRead(id);
+                                              if (!mounted) return;
+                                              setState(() {
+                                                _notifications =
+                                                    _notifications
+                                                        .where(
+                                                          (item) =>
+                                                              (item['id'] ?? '')
+                                                                  .toString() !=
+                                                              id,
+                                                        )
+                                                        .toList();
+                                              });
+                                            } catch (e) {
+                                              messenger.showSnackBar(
+                                                SnackBar(content: Text('$e')),
+                                              );
+                                            }
+                                          },
+                                    child: FtSectionCard(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 10,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            isRead
+                                                ? Icons
+                                                    .notifications_none_outlined
+                                                : Icons.notifications_outlined,
+                                            color: AppTheme.forest,
+                                            size: 18,
+                                          ),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Text(
+                                              (n['message'] ??
+                                                      n['title'] ??
+                                                      'Notice')
+                                                  .toString(),
+                                              style: AppTheme.body(
+                                                size: 13,
+                                                weight: isRead
+                                                    ? FontWeight.w400
+                                                    : FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                          if (!isRead)
+                                            Icon(
+                                              Icons.circle,
+                                              size: 8,
+                                              color: AppTheme.forest,
+                                            ),
+                                        ],
                                       ),
                                     ),
-                                  ],
+                                  ),
                                 ),
-                              ),
-                            ),
+                              );
+                            },
                           ),
                     ],
                     const SizedBox(height: 24),

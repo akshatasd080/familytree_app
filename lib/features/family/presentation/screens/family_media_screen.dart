@@ -8,8 +8,12 @@ import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
 import '../../../../core/widgets/ft_page.dart';
 import '../../../../core/widgets/responsive.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../data/family_api_service.dart';
+import '../../data/models/family_models.dart';
 import '../providers/family_providers.dart';
+import '../widgets/family_chat_panel.dart';
+import '../widgets/family_room_panel.dart';
 
 class FamilyMediaScreen extends StatefulWidget {
   const FamilyMediaScreen({super.key});
@@ -18,15 +22,25 @@ class FamilyMediaScreen extends StatefulWidget {
   State<FamilyMediaScreen> createState() => _FamilyMediaScreenState();
 }
 
-class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
+class _FamilyMediaScreenState extends State<FamilyMediaScreen>
+    with SingleTickerProviderStateMixin {
   List<Map<String, dynamic>> _media = const [];
+  List<FamilyMember> _members = const [];
   bool _loading = true;
   String? _error;
+  late final TabController _tabs;
 
   @override
   void initState() {
     super.initState();
+    _tabs = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -46,9 +60,12 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
       _error = null;
     });
     try {
-      final res =
-          await context.read<FamilyApiService>().listFamilyMedia(familyId);
-      final data = res.data;
+      final api = context.read<FamilyApiService>();
+      final results = await Future.wait([
+        api.listFamilyMedia(familyId),
+        api.listFamilyMembers(familyId),
+      ]);
+      final data = results[0].data;
       List list = const [];
       if (data is Map && data['media'] is List) {
         list = data['media'] as List;
@@ -58,6 +75,18 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
       _media = list
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+
+      final mdata = results[1].data;
+      List mlist = const [];
+      if (mdata is Map && mdata['members'] is List) {
+        mlist = mdata['members'] as List;
+      } else if (mdata is List) {
+        mlist = mdata;
+      }
+      _members = mlist
+          .whereType<Map>()
+          .map((e) => FamilyMember.fromJson(Map<String, dynamic>.from(e)))
           .toList();
     } catch (e) {
       _error = e.toString();
@@ -363,184 +392,252 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
     );
   }
 
+  Widget _buildFeed() {
+    if (_media.isEmpty) {
+      return ListView(
+        children: const [
+          SizedBox(height: 120),
+          Center(child: Text('No photos yet')),
+        ],
+      );
+    }
+    return ListView.builder(
+      padding: context.pagePadding.copyWith(bottom: 88),
+      itemCount: _media.length,
+      itemBuilder: (_, i) {
+        final item = _media[i];
+        final url = _imageUrl(item);
+        final created =
+            item['createdAt'] ?? item['created_at'] ?? item['uploadedAt'];
+        final when = DateTime.tryParse('$created');
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Material(
+            color: AppTheme.card,
+            borderRadius: BorderRadius.circular(16),
+            child: InkWell(
+              onTap: () => _openPost(item),
+              borderRadius: BorderRadius.circular(16),
+              child: Ink(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFFCE7F3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 16,
+                            backgroundColor:
+                                AppTheme.accentPink.withValues(alpha: 0.15),
+                            child: Text(
+                              _author(item).isNotEmpty
+                                  ? _author(item)[0].toUpperCase()
+                                  : '?',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFFFF5C8A),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _author(item),
+                                  style: AppTheme.body(weight: FontWeight.w800),
+                                ),
+                                if (when != null)
+                                  Text(
+                                    DateFormat.yMMMd()
+                                        .add_jm()
+                                        .format(when.toLocal()),
+                                    style: AppTheme.body(
+                                      size: 11,
+                                      color: AppTheme.muted,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    AspectRatio(
+                      aspectRatio: 4 / 3,
+                      child: url == null
+                          ? Container(
+                              color: Colors.black12,
+                              child: const Icon(Icons.image),
+                            )
+                          : CachedNetworkImage(
+                              imageUrl: url,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                            ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.favorite,
+                                size: 16,
+                                color: Color(0xFFFF5C8A),
+                              ),
+                              const SizedBox(width: 4),
+                              Text('${_likes(item)}'),
+                              const SizedBox(width: 12),
+                              const Icon(Icons.chat_bubble_outline, size: 16),
+                              const SizedBox(width: 4),
+                              Text('${_comments(item).length}'),
+                            ],
+                          ),
+                          if ((item['caption'] ?? '').toString().isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              item['caption'].toString(),
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildChatsTab(String familyId) {
+    final myUserId = context.watch<AuthProvider>().user?.id;
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppTheme.tabTrack,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: TabBar(
+                indicator: BoxDecoration(
+                  color: AppTheme.card,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                indicatorSize: TabBarIndicatorSize.tab,
+                dividerColor: Colors.transparent,
+                labelColor: AppTheme.ink,
+                unselectedLabelColor: AppTheme.muted,
+                labelStyle: AppTheme.body(size: 12, weight: FontWeight.w700),
+                tabs: const [
+                  Tab(text: 'Direct'),
+                  Tab(text: 'Rooms'),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                FamilyChatPanel(familyId: familyId),
+                FamilyRoomPanel(
+                  familyId: familyId,
+                  members: _members,
+                  myUserId: myUserId,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final familyId = context.watch<FamilySessionProvider>().familyId;
     return FtPage(
       title: 'Media',
       actions: [
         IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
       ],
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _compose,
-        backgroundColor: AppTheme.accentPink,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add_a_photo),
-        label: const Text('Post'),
-      ),
+      floatingActionButton: _tabs.index == 0
+          ? FloatingActionButton.extended(
+              onPressed: _compose,
+              backgroundColor: AppTheme.accentPink,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add_a_photo),
+              label: const Text('Post'),
+            )
+          : null,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(child: Text(_error!))
-              : RefreshIndicator(
-                  onRefresh: _load,
-                  child: _media.isEmpty
-                      ? ListView(
-                          children: const [
-                            SizedBox(height: 120),
-                            Center(child: Text('No photos yet')),
-                          ],
-                        )
-                      : ListView.builder(
-                          padding: context.pagePadding.copyWith(bottom: 88),
-                          itemCount: _media.length,
-                          itemBuilder: (_, i) {
-                            final item = _media[i];
-                            final url = _imageUrl(item);
-                            final created = item['createdAt'] ??
-                                item['created_at'] ??
-                                item['uploadedAt'];
-                            final when = DateTime.tryParse('$created');
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: Material(
-                                color: AppTheme.card,
-                                borderRadius: BorderRadius.circular(16),
-                                child: InkWell(
-                                  onTap: () => _openPost(item),
-                                  borderRadius: BorderRadius.circular(16),
-                                  child: Ink(
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: const Color(0xFFFCE7F3),
-                                      ),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Padding(
-                                          padding: const EdgeInsets.fromLTRB(
-                                            12,
-                                            12,
-                                            12,
-                                            8,
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              CircleAvatar(
-                                                radius: 16,
-                                                backgroundColor: AppTheme
-                                                    .accentPink
-                                                    .withValues(alpha: 0.15),
-                                                child: Text(
-                                                  _author(item).isNotEmpty
-                                                      ? _author(item)[0]
-                                                          .toUpperCase()
-                                                      : '?',
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.w800,
-                                                    color: Color(0xFFFF5C8A),
-                                                  ),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      _author(item),
-                                                      style: AppTheme.body(
-                                                        weight: FontWeight.w800,
-                                                      ),
-                                                    ),
-                                                    if (when != null)
-                                                      Text(
-                                                        DateFormat.yMMMd()
-                                                            .add_jm()
-                                                            .format(
-                                                              when.toLocal(),
-                                                            ),
-                                                        style: AppTheme.body(
-                                                          size: 11,
-                                                          color: AppTheme.muted,
-                                                        ),
-                                                      ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        AspectRatio(
-                                          aspectRatio: 4 / 3,
-                                          child: url == null
-                                              ? Container(
-                                                  color: Colors.black12,
-                                                  child: const Icon(Icons.image),
-                                                )
-                                              : CachedNetworkImage(
-                                                  imageUrl: url,
-                                                  fit: BoxFit.cover,
-                                                  width: double.infinity,
-                                                ),
-                                        ),
-                                        Padding(
-                                          padding: const EdgeInsets.fromLTRB(
-                                            12,
-                                            10,
-                                            12,
-                                            12,
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Row(
-                                                children: [
-                                                  const Icon(
-                                                    Icons.favorite,
-                                                    size: 16,
-                                                    color: Color(0xFFFF5C8A),
-                                                  ),
-                                                  const SizedBox(width: 4),
-                                                  Text('${_likes(item)}'),
-                                                  const SizedBox(width: 12),
-                                                  const Icon(
-                                                    Icons.chat_bubble_outline,
-                                                    size: 16,
-                                                  ),
-                                                  const SizedBox(width: 4),
-                                                  Text(
-                                                    '${_comments(item).length}',
-                                                  ),
-                                                ],
-                                              ),
-                                              if ((item['caption'] ?? '')
-                                                  .toString()
-                                                  .isNotEmpty) ...[
-                                                const SizedBox(height: 6),
-                                                Text(
-                                                  item['caption'].toString(),
-                                                  maxLines: 3,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
+              : familyId == null
+                  ? const Center(child: Text('No family'))
+                  : Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: AppTheme.tabTrack,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: TabBar(
+                              controller: _tabs,
+                              onTap: (_) => setState(() {}),
+                              indicator: BoxDecoration(
+                                color: AppTheme.forest,
+                                borderRadius: BorderRadius.circular(10),
                               ),
-                            );
-                          },
+                              indicatorSize: TabBarIndicatorSize.tab,
+                              dividerColor: Colors.transparent,
+                              labelColor: Colors.white,
+                              unselectedLabelColor: AppTheme.muted,
+                              labelStyle: AppTheme.body(
+                                size: 13,
+                                weight: FontWeight.w700,
+                              ),
+                              tabs: const [
+                                Tab(text: 'Feed'),
+                                Tab(text: 'Chats'),
+                              ],
+                            ),
+                          ),
                         ),
-                ),
+                        Expanded(
+                          child: TabBarView(
+                            controller: _tabs,
+                            children: [
+                              RefreshIndicator(
+                                onRefresh: _load,
+                                child: _buildFeed(),
+                              ),
+                              _buildChatsTab(familyId),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
     );
   }
 }

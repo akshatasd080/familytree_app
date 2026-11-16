@@ -32,6 +32,7 @@ Future<void> showMemberPreviewSheet({
   required FamilyMember member,
   required String familyId,
   required Future<void> Function() onChanged,
+  bool isAdmin = false,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -42,6 +43,7 @@ Future<void> showMemberPreviewSheet({
       member: member,
       familyId: familyId,
       onChanged: onChanged,
+      isAdmin: isAdmin,
     ),
   );
 }
@@ -51,11 +53,13 @@ class _MemberPreviewSheet extends StatelessWidget {
     required this.member,
     required this.familyId,
     required this.onChanged,
+    this.isAdmin = false,
   });
 
   final FamilyMember member;
   final String familyId;
   final Future<void> Function() onChanged;
+  final bool isAdmin;
 
   String _joinedLabel() {
     final raw = member.joinedAt;
@@ -253,33 +257,167 @@ class _MemberPreviewSheet extends StatelessWidget {
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                  child: Row(
+                  child: Column(
                     children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Close'),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: FilledButton.icon(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFF0284C7),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text('Close'),
+                            ),
                           ),
-                          onPressed: () async {
-                            Navigator.pop(context);
-                            final changed = await showMemberEditSheet(
-                              context: context,
-                              member: member,
-                              familyId: familyId,
-                            );
-                            if (changed) await onChanged();
-                          },
-                          icon: const Icon(Icons.edit_outlined, size: 18),
-                          label: const Text('Edit'),
-                        ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: FilledButton.icon(
+                              style: FilledButton.styleFrom(
+                                backgroundColor: const Color(0xFF0284C7),
+                              ),
+                              onPressed: () async {
+                                Navigator.pop(context);
+                                final changed = await showMemberEditSheet(
+                                  context: context,
+                                  member: member,
+                                  familyId: familyId,
+                                );
+                                if (changed) await onChanged();
+                              },
+                              icon: const Icon(Icons.edit_outlined, size: 18),
+                              label: const Text('Edit'),
+                            ),
+                          ),
+                        ],
                       ),
+                      if (isAdmin && !member.isSiteCreator) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            if (member.isAlive)
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xFFBE123C),
+                                  ),
+                                  onPressed: () async {
+                                    final ok = await showDialog<bool>(
+                                      context: context,
+                                      builder: (ctx) => AlertDialog(
+                                        title: Text(
+                                          'Mark ${member.name} as not alive?',
+                                        ),
+                                        content: const Text(
+                                          'They stay on the family tree as a memorial. They will no longer appear in chats or rooms.',
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(ctx, false),
+                                            child: const Text('Cancel'),
+                                          ),
+                                          FilledButton(
+                                            style: FilledButton.styleFrom(
+                                              backgroundColor:
+                                                  const Color(0xFFBE123C),
+                                            ),
+                                            onPressed: () =>
+                                                Navigator.pop(ctx, true),
+                                            child: const Text('Mark memorial'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    if (ok != true || !context.mounted) return;
+                                    try {
+                                      await context
+                                          .read<FamilyApiService>()
+                                          .updateFamilyMember(
+                                        familyId,
+                                        member.id,
+                                        {
+                                          'isAlive': false,
+                                          'profileInfo': {
+                                            ...member.profileInfo,
+                                            'isAlive': false,
+                                          },
+                                        },
+                                      );
+                                      if (!context.mounted) return;
+                                      Navigator.pop(context);
+                                      await onChanged();
+                                    } catch (e) {
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(content: Text('$e')),
+                                      );
+                                    }
+                                  },
+                                  icon: const Icon(
+                                    Icons.favorite_border,
+                                    size: 18,
+                                  ),
+                                  label: const Text('Memorial'),
+                                ),
+                              ),
+                            if (member.isAlive) const SizedBox(width: 10),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.redAccent,
+                                ),
+                                onPressed: () async {
+                                  final ok = await showDialog<bool>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: Text('Remove ${member.name}?'),
+                                      content: const Text(
+                                        'This removes them from the family. This cannot be undone easily.',
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.pop(ctx, false),
+                                          child: const Text('Cancel'),
+                                        ),
+                                        FilledButton(
+                                          style: FilledButton.styleFrom(
+                                            backgroundColor: Colors.redAccent,
+                                          ),
+                                          onPressed: () =>
+                                              Navigator.pop(ctx, true),
+                                          child: const Text('Remove'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                  if (ok != true || !context.mounted) return;
+                                  try {
+                                    await context
+                                        .read<FamilyApiService>()
+                                        .removeFamilyMember(
+                                          familyId,
+                                          member.id,
+                                        );
+                                    if (!context.mounted) return;
+                                    Navigator.pop(context);
+                                    await onChanged();
+                                  } catch (e) {
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('$e')),
+                                    );
+                                  }
+                                },
+                                icon: const Icon(
+                                  Icons.person_remove_outlined,
+                                  size: 18,
+                                ),
+                                label: const Text('Remove'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),

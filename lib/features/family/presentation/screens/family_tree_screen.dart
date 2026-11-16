@@ -10,6 +10,7 @@ import '../../domain/ego_tree.dart';
 import '../providers/family_providers.dart';
 import '../widgets/add_relative_radial.dart';
 import '../widgets/add_relative_sheet.dart';
+import '../widgets/family_chat_panel.dart';
 import '../widgets/family_graph_view.dart';
 
 class FamilyTreeScreen extends StatefulWidget {
@@ -27,6 +28,8 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   FamilyMember? _selected;
   FamilyMember? _radialPerson;
   String? _role;
+  String? _chatPeerUserId;
+  int _chatDockNonce = 0;
 
   @override
   void initState() {
@@ -360,6 +363,26 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                       trailing: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
+                                          if ((_selected!.userId ?? '')
+                                                  .isNotEmpty &&
+                                              _selected!.userId !=
+                                                  auth.user?.id &&
+                                              _selected!.isAlive)
+                                            IconButton(
+                                              tooltip: 'Chat',
+                                              onPressed: () {
+                                                setState(() {
+                                                  _chatPeerUserId =
+                                                      _selected!.userId;
+                                                  _chatDockNonce++;
+                                                  _selected = null;
+                                                });
+                                              },
+                                              icon: Icon(
+                                                Icons.chat_bubble,
+                                                color: AppTheme.accentPink,
+                                              ),
+                                            ),
                                           if (_canAddOnTree)
                                             IconButton(
                                               tooltip: 'Add relative',
@@ -387,6 +410,19 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                       ],
                     ),
         ),
+        if (!_loading &&
+            _error == null &&
+            session.familyId != null)
+          FamilyChatDock(
+            key: ValueKey('chat-dock-$_chatDockNonce-${session.familyId}'),
+            familyId: session.familyId!,
+            initialPeerUserId: _chatPeerUserId,
+            onModeChanged: (mode) {
+              if (mode == FamilyChatDockMode.closed) {
+                setState(() => _chatPeerUserId = null);
+              }
+            },
+          ),
         if (_radialPerson != null)
           Positioned.fill(
             child: AddRelativeRadial(

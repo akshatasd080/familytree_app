@@ -1,0 +1,48 @@
+Play Console → App content → Data safety (fill using these answers)
+=================================================================
+
+App collects / shares data to provide app functionality. Data is encrypted in transit (HTTPS).
+Users can request deletion by contacting support.
+
+DATA COLLECTED
+--------------
+Personal info
+  - Name: Collected, Optional for some memorial entries, App functionality
+  - Email address: Collected, Optional (phone-only accounts exist), Account management
+  - Phone number: Collected, Optional, Account management / OTP
+  - User IDs: Collected, App functionality
+
+Photos and videos
+  - Photos: Collected (avatars, family media), Optional, App functionality
+  - Shared with other family members inside the same family (not sold)
+
+Messages
+  - Other in-app messages: Collected (1:1 chat + rooms), App functionality
+  - Shared with conversation participants / room members
+
+App activity
+  - App interactions / in-app search: may appear in server logs for reliability
+  - Not used for advertising
+
+Location
+  - Approximate location: Collected as user-entered city/area text for map pins
+  - Not precise GPS required
+  - App functionality (family map)
+
+NOT COLLECTED / NOT USED FOR
+----------------------------
+- No advertising ID / no ads SDK
+- No sale of user data
+- No data shared with third parties for advertising or marketing
+- No financial payment info in-app
+
+SECURITY PRACTICES
+------------------
+- Data encrypted in transit: YES
+- Users can request deletion: YES (support@dhilwari.com)
+- Committed to Play Families Policy where applicable for family content: follow console prompts
+
+EPHEMERAL / SENSITIVE
+---------------------
+- Passwords stored hashed on server (not readable by staff as plaintext)
+- OTP codes are short-lived

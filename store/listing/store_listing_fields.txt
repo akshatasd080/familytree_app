@@ -1,0 +1,34 @@
+Play Console — Store listing fields (copy/paste)
+================================================
+
+Package name:        com.familytree.app
+App name (title):    Family Tree
+Default language:    English (United States) — add Hindi later if needed
+
+Short description:   see short_description.txt  (max 80 characters)
+Full description:    see full_description.txt   (max 4000 characters)
+
+App icon:            store/icon_512.png          (512 × 512 PNG)
+Feature graphic:     store/feature_graphic.png   (1024 × 500 PNG)
+
+Phone screenshots:   REQUIRED (minimum 2)
+  - Capture from a real device or emulator after login
+  - Suggested shots: Dashboard, Family Tree, Media feed, Members, Map, Events
+  - Size: 16:9 or 9:16, JPEG/PNG, max 8 MB each
+  - Folder to place them: store/screenshots/
+
+Privacy policy URL:  https://familytree.dhilwari.com/privacy.html
+  (Deploy frontend public/privacy.html with your web app first)
+
+Contact email:       support@dhilwari.com
+Website:             https://familytree.dhilwari.com
+
+Category:            Social  (or Lifestyle)
+Tags:                family, family tree, genealogy, private, chat
+
+Countries:           Start with India (or all countries)
+Pricing:             Free
+
+App access (if login-walled for review):
+  Provide a demo family account email/phone + password in Play Console
+  “App access” so Google reviewers can sign in.

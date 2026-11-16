@@ -27,6 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscure = true;
   bool _signingIn = false;
   bool _lookupLoading = false;
+  bool _sendingLogin = false;
   Map<String, dynamic>? _lookupResult;
   List<Map<String, dynamic>> _familyResults = [];
   String? _error;
@@ -662,9 +663,81 @@ class _LoginScreenState extends State<LoginScreen> {
       if (_lookupResult != null) ...[
         const SizedBox(height: 12),
         FtSectionCard(
-          child: Text(
-            _lookupResult!['message']?.toString() ?? _lookupResult.toString(),
-            style: AppTheme.body(size: 13),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                _lookupResult!['message']?.toString() ??
+                    _lookupResult.toString(),
+                style: AppTheme.body(size: 13),
+              ),
+              if (_lookupResult!['isMember'] == true) ...[
+                const SizedBox(height: 10),
+                Builder(
+                  builder: (_) {
+                    final rawEmail =
+                        (_lookupResult!['email'] ?? '').toString().trim();
+                    final loginEmail = rawEmail.isNotEmpty &&
+                            !rawEmail.endsWith('@phone.familytree.local')
+                        ? rawEmail
+                        : '';
+                    if (loginEmail.isEmpty) {
+                      return Text(
+                        'This account uses mobile login. Go to Sign in with your number.',
+                        style: AppTheme.body(
+                          size: 12,
+                          color: AppTheme.muted,
+                        ),
+                      );
+                    }
+                    return SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _sendingLogin
+                            ? null
+                            : () async {
+                                setState(() => _sendingLogin = true);
+                                try {
+                                  final res = await context
+                                      .read<FamilyApiService>()
+                                      .sendFamilyLogin(loginEmail);
+                                  if (!mounted) return;
+                                  final msg = res.data is Map
+                                      ? (res.data['message'] ??
+                                              'Login details sent')
+                                          .toString()
+                                      : 'Login details sent';
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text(msg)),
+                                  );
+                                } catch (e) {
+                                  if (!mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('$e')),
+                                  );
+                                } finally {
+                                  if (mounted) {
+                                    setState(() => _sendingLogin = false);
+                                  }
+                                }
+                              },
+                        icon: _sendingLogin
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.send, size: 18),
+                        label: const Text('Email login & password'),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ],
           ),
         ),
       ],
