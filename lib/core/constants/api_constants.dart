@@ -6,7 +6,7 @@ class ApiConstants {
   /// Default for release / Play Store builds.
   /// Override at build time:
   ///   flutter build appbundle --dart-define=API_BASE_URL=https://familytree.dhilwari.com/api
-  static const Environment current = Environment.prod;
+  static const Environment current = Environment.local;
 
   static const String _defineBaseUrl = String.fromEnvironment(
     'API_BASE_URL',

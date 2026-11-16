@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../core/widgets/ft_widgets.dart';
 import '../features/auth/presentation/providers/auth_providers.dart';
 import '../features/auth/presentation/widgets/set_initial_password_dialog.dart';
 import '../features/family/presentation/providers/family_providers.dart';
@@ -134,11 +135,7 @@ class _AppDrawer extends StatelessWidget {
                   userName,
                   style: AppTheme.body(size: 14, color: AppTheme.muted),
                 ),
-                leading: CircleAvatar(
-                  radius: 22,
-                  backgroundColor: AppTheme.forest.withValues(alpha: 0.16),
-                  child: Icon(Icons.park, color: AppTheme.forest, size: 24),
-                ),
+                leading: const FtBrandMark(size: 44),
               ),
               const Divider(),
               _item(context, Icons.dashboard, 'Dashboard', '/dashboard'),

@@ -7,23 +7,39 @@ class FtBrandMark extends StatelessWidget {
 
   final double size;
 
+  static const String assetPath = 'assets/images/logo.png';
+
   @override
   Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(size * 0.28);
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: AppTheme.forest,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: radius,
         boxShadow: [
           BoxShadow(
-            color: AppTheme.forest.withValues(alpha: 0.25),
+            color: Colors.black.withValues(alpha: 0.18),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
       ),
-      child: Icon(Icons.park, color: Colors.white, size: size * 0.5),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: Image.asset(
+          assetPath,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          filterQuality: FilterQuality.high,
+          errorBuilder: (_, __, ___) => Container(
+            color: AppTheme.forest,
+            alignment: Alignment.center,
+            child: Icon(Icons.park, color: Colors.white, size: size * 0.5),
+          ),
+        ),
+      ),
     );
   }
 }
