@@ -274,7 +274,7 @@ class _FamilyMapScreenState extends State<FamilyMapScreen> {
                             urlTemplate:
                                 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                             userAgentPackageName:
-                                'com.example.familytree_app',
+                                'com.imt.familytree_app',
                           ),
                           MarkerLayer(
                             markers: [

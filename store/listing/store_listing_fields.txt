@@ -1,7 +1,7 @@
 Play Console — Store listing fields (copy/paste)
 ================================================
 
-Package name:        com.familytree.app
+Package name:        com.imt.familytree_app
 App name (title):    Family Tree
 Default language:    English (United States) — add Hindi later if needed
 

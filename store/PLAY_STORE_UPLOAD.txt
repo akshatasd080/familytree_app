@@ -1,7 +1,7 @@
 Family Tree — Play Store go-live checklist
 ==========================================
 
-App ID (applicationId): com.familytree.app
+App ID (applicationId): com.imt.familytree_app
 App name: Family Tree
 Version: pubspec.yaml → 1.0.0+1   (bump +N for EVERY new Play upload)
 Upload keystore: android/app/upload-keystore.jks
@@ -34,7 +34,7 @@ A) Before you upload (code)
 B) Play Console setup
 ------------------------------------------------
 1. Create developer account (one-time fee) if not done.
-2. Create app → package name MUST be: com.familytree.app
+2. Create app → package name MUST be: com.imt.familytree_app
 3. Dashboard → Testing / Production → Create release → upload AAB
 4. Store listing — copy from store/listing/:
    - title.txt
