@@ -4,8 +4,10 @@ import 'package:provider/provider.dart';
 
 import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../data/family_api_service.dart';
 import '../../data/models/family_models.dart';
+import '../../domain/profile_privacy.dart';
 import 'state_city_select.dart';
 
 const _relationshipChoices = <String>[
@@ -73,11 +75,28 @@ class _MemberPreviewSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final url = mediaUrl(member.avatar);
+    final meId = context.watch<AuthProvider>().user?.id;
+    final isSelf = meId != null &&
+        meId.isNotEmpty &&
+        (member.userId == meId || member.id == meId);
+    final privacy = privacyOfMember(profileInfo: member.profileInfo);
+    final canSeePrivate = canSeePrivateFields(
+      isAdmin: isAdmin,
+      isSelf: isSelf,
+    );
+    final phonePrivate = isFieldPrivate(
+      privacy,
+      'phone',
+      canSeePrivate: canSeePrivate,
+    );
     final phone = (member.phone ?? member.profileInfo['phone'] ?? '')
         .toString()
         .trim();
     final email = member.displayEmail;
     final location = (member.location ?? '').trim();
+    final phoneLabel = phone.isNotEmpty
+        ? phone
+        : privateOrEmptyLabel(isPrivate: phonePrivate, emptyLabel: '—');
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
@@ -244,7 +263,7 @@ class _MemberPreviewSheet extends StatelessWidget {
                         _InfoTile(
                           icon: Icons.phone_outlined,
                           label: 'Phone',
-                          value: phone.isEmpty ? '—' : phone,
+                          value: phoneLabel,
                         ),
                         _InfoTile(
                           icon: Icons.mail_outline,

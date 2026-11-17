@@ -8,6 +8,7 @@ import '../../../../core/utils/media_url.dart';
 import '../../../../core/widgets/ft_page.dart';
 import '../../../../core/widgets/responsive.dart';
 import '../../data/family_api_service.dart';
+import '../../domain/profile_privacy.dart';
 import '../widgets/state_city_select.dart';
 
 const _bloodGroups = [
@@ -39,6 +40,7 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
   String? _marriage;
   String _blood = 'Unknown';
   String? _avatar;
+  Map<String, String> _privacy = normalizePrivacy(const {});
   final List<_PairFields> _educations = [];
   final List<_PairFields> _jobs = [];
   bool _loading = true;
@@ -136,6 +138,7 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
           .toString();
       _blood = _bloodGroups.contains(bg) ? bg : 'Unknown';
       _avatar = (profile['avatar'] ?? data['avatar'])?.toString();
+      _privacy = normalizePrivacy(profile['privacy'] ?? data['privacy']);
 
       for (final e in _educations) {
         e.dispose();
@@ -210,6 +213,7 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
             if (j.a.text.trim().isNotEmpty || j.b.text.trim().isNotEmpty)
               {'title': j.a.text.trim(), 'place': j.b.text.trim()},
         ],
+        'privacy': _privacy,
       });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -338,6 +342,13 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
                     decoration: const InputDecoration(labelText: 'Email'),
                   ),
                   const SizedBox(height: 10),
+                  _PrivacyFieldHeader(
+                    label: 'Phone',
+                    value: _privacy['phone'] ?? 'private',
+                    onChanged: (v) => setState(
+                      () => _privacy = {..._privacy, 'phone': v},
+                    ),
+                  ),
                   TextField(
                     controller: _phone,
                     keyboardType: TextInputType.phone,
@@ -345,6 +356,7 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Phone',
                       counterText: '',
+                      helperText: 'Private = only you see it',
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -356,10 +368,25 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: _DateField(
-                          label: 'Date of birth',
-                          value: _dob,
-                          onTap: () => _pickDate(marriage: false),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _PrivacyFieldHeader(
+                              label: 'Date of birth',
+                              value: _privacy['dateOfBirth'] ?? 'private',
+                              onChanged: (v) => setState(
+                                () => _privacy = {
+                                  ..._privacy,
+                                  'dateOfBirth': v,
+                                },
+                              ),
+                            ),
+                            _DateField(
+                              label: 'Date of birth',
+                              value: _dob,
+                              onTap: () => _pickDate(marriage: false),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -373,6 +400,13 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
                     ],
                   ),
                   const SizedBox(height: 10),
+                  _PrivacyFieldHeader(
+                    label: 'Blood group',
+                    value: _privacy['bloodGroup'] ?? 'private',
+                    onChanged: (v) => setState(
+                      () => _privacy = {..._privacy, 'bloodGroup': v},
+                    ),
+                  ),
                   DropdownButtonFormField<String>(
                     value: _blood,
                     decoration: const InputDecoration(labelText: 'Blood group'),
@@ -392,6 +426,10 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
                   const SizedBox(height: 8),
                   _SectionHeader(
                     title: 'Education',
+                    privacyValue: _privacy['education'] ?? 'private',
+                    onPrivacyChanged: (v) => setState(
+                      () => _privacy = {..._privacy, 'education': v},
+                    ),
                     onAdd: () {
                       if (_educations.length >= 8) return;
                       setState(() => _educations.add(_PairFields('', '')));
@@ -432,6 +470,10 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
                   }),
                   _SectionHeader(
                     title: 'Jobs',
+                    privacyValue: _privacy['job'] ?? 'private',
+                    onPrivacyChanged: (v) => setState(
+                      () => _privacy = {..._privacy, 'job': v},
+                    ),
                     onAdd: () {
                       if (_jobs.length >= 8) return;
                       setState(() => _jobs.add(_PairFields('', '')));
@@ -539,10 +581,17 @@ class _DateField extends StatelessWidget {
 }
 
 class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, required this.onAdd});
+  const _SectionHeader({
+    required this.title,
+    required this.onAdd,
+    this.privacyValue,
+    this.onPrivacyChanged,
+  });
 
   final String title;
   final VoidCallback onAdd;
+  final String? privacyValue;
+  final ValueChanged<String>? onPrivacyChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -553,12 +602,123 @@ class _SectionHeader extends StatelessWidget {
           Expanded(
             child: Text(title, style: AppTheme.body(weight: FontWeight.w800)),
           ),
+          if (privacyValue != null && onPrivacyChanged != null) ...[
+            _PrivacyToggle(
+              value: privacyValue!,
+              onChanged: onPrivacyChanged!,
+            ),
+            const SizedBox(width: 4),
+          ],
           TextButton.icon(
             onPressed: onAdd,
             icon: const Icon(Icons.add, size: 18),
             label: const Text('Add'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PrivacyFieldHeader extends StatelessWidget {
+  const _PrivacyFieldHeader({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: AppTheme.body(size: 13, weight: FontWeight.w700),
+            ),
+          ),
+          _PrivacyToggle(value: value, onChanged: onChanged),
+        ],
+      ),
+    );
+  }
+}
+
+class _PrivacyToggle extends StatelessWidget {
+  const _PrivacyToggle({required this.value, required this.onChanged});
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final isPublic = value == 'public';
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _PrivacyChip(
+            label: 'Public',
+            selected: isPublic,
+            selectedColor: AppTheme.forest,
+            onTap: () => onChanged('public'),
+          ),
+          _PrivacyChip(
+            label: 'Private',
+            selected: !isPublic,
+            selectedColor: const Color(0xFF1E293B),
+            onTap: () => onChanged('private'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PrivacyChip extends StatelessWidget {
+  const _PrivacyChip({
+    required this.label,
+    required this.selected,
+    required this.selectedColor,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final Color selectedColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected ? selectedColor : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            color: selected ? Colors.white : const Color(0xFF64748B),
+          ),
+        ),
       ),
     );
   }

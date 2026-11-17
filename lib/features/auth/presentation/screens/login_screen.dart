@@ -84,9 +84,16 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     try {
       final api = context.read<FamilyApiService>();
-      final payload = _checkPhone.text.trim().isNotEmpty
-          ? {'phone': normalizeLoginIdentifier(_checkPhone.text)}
-          : {'email': _checkEmail.text.trim().toLowerCase()};
+      final usePhone = _checkPhone.text.trim().isNotEmpty;
+      final payload = usePhone
+          ? {
+              'contactMethod': 'phone',
+              'phone': normalizeLoginIdentifier(_checkPhone.text),
+            }
+          : {
+              'contactMethod': 'email',
+              'email': _checkEmail.text.trim().toLowerCase(),
+            };
       final res = await api.lookupFamilyMembership(payload);
       final data = res.data;
       setState(() {

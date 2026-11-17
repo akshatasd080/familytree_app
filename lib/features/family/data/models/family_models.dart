@@ -137,6 +137,10 @@ class FamilyMember {
     final profileMap = profile is Map
         ? Map<String, dynamic>.from(profile)
         : <String, dynamic>{};
+    // Tree graph may expose privacy at top-level; keep it on profileInfo.
+    if (profileMap['privacy'] == null && json['privacy'] is Map) {
+      profileMap['privacy'] = Map<String, dynamic>.from(json['privacy'] as Map);
+    }
     final aliveRaw = json['is_alive'] ?? json['isAlive'] ?? profileMap['isAlive'];
     final accessRole = (profileMap['accessRole'] ?? profileMap['role'] ?? '')
         .toString()

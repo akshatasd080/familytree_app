@@ -7,6 +7,7 @@ import '../../data/family_api_service.dart';
 import '../../data/models/family_models.dart';
 import '../../domain/ego_tree.dart';
 import '../../domain/family_graph_layout.dart';
+import '../../domain/profile_privacy.dart';
 
 /// Web-parity profile panel opened from the Family Tree.
 Future<void> showTreeMemberProfileSheet({
@@ -231,6 +232,36 @@ class _TreeMemberProfileSheetState extends State<_TreeMemberProfileSheet> {
   Widget build(BuildContext context) {
     final enriched = _enriched;
     final url = mediaUrl(_member.avatar);
+    final privacy = privacyOfMember(profileInfo: _member.profileInfo);
+    final canSeePrivate = canSeePrivateFields(
+      isAdmin: widget.isAdmin,
+      isSelf: _isMe,
+    );
+    final phonePrivate = isFieldPrivate(
+      privacy,
+      'phone',
+      canSeePrivate: canSeePrivate,
+    );
+    final dobPrivate = isFieldPrivate(
+      privacy,
+      'dateOfBirth',
+      canSeePrivate: canSeePrivate,
+    );
+    final educationPrivate = isFieldPrivate(
+      privacy,
+      'education',
+      canSeePrivate: canSeePrivate,
+    );
+    final jobPrivate = isFieldPrivate(
+      privacy,
+      'job',
+      canSeePrivate: canSeePrivate,
+    );
+    final bloodPrivate = isFieldPrivate(
+      privacy,
+      'bloodGroup',
+      canSeePrivate: canSeePrivate,
+    );
     final phone = (_member.phone ?? enriched['phone'] ?? '')
         .toString()
         .trim();
@@ -273,6 +304,18 @@ class _TreeMemberProfileSheetState extends State<_TreeMemberProfileSheet> {
         _member.hasLoginAccount &&
         !_isMe &&
         _member.isAlive;
+    final phoneLabel = phone.isNotEmpty
+        ? phone
+        : privateOrEmptyLabel(
+            isPrivate: phonePrivate,
+            emptyLabel: 'Mobile not added',
+          );
+    final dobLabel = dob.isNotEmpty
+        ? dob
+        : privateOrEmptyLabel(
+            isPrivate: dobPrivate,
+            emptyLabel: 'Date of birth not added',
+          );
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
@@ -448,15 +491,18 @@ class _TreeMemberProfileSheetState extends State<_TreeMemberProfileSheet> {
                         value: location.isEmpty ? 'Location not added' : location,
                         muted: location.isEmpty,
                       ),
-                      if (phone.isNotEmpty)
-                        _InfoRow(icon: Icons.phone_outlined, value: phone),
+                      _InfoRow(
+                        icon: Icons.phone_outlined,
+                        value: phoneLabel,
+                        muted: phone.isEmpty,
+                      ),
                       if (email.isNotEmpty)
                         _InfoRow(icon: Icons.mail_outline, value: email),
-                      if (dob.isNotEmpty)
-                        _InfoRow(
-                          icon: Icons.cake_outlined,
-                          value: dob,
-                        ),
+                      _InfoRow(
+                        icon: Icons.cake_outlined,
+                        value: dobLabel,
+                        muted: dob.isEmpty,
+                      ),
                       if (kinRows.isNotEmpty) ...[
                         const SizedBox(height: 14),
                         Text(
@@ -558,10 +604,13 @@ class _TreeMemberProfileSheetState extends State<_TreeMemberProfileSheet> {
                         child: _buildTabBody(
                           educations: educations,
                           educationText: educationText,
+                          educationPrivate: educationPrivate,
                           jobs: jobs,
                           occupation: occupation,
                           workplace: workplace,
+                          jobPrivate: jobPrivate,
                           blood: blood,
+                          bloodPrivate: bloodPrivate,
                         ),
                       ),
                     ],
@@ -629,10 +678,13 @@ class _TreeMemberProfileSheetState extends State<_TreeMemberProfileSheet> {
   Widget _buildTabBody({
     required List<Map<String, dynamic>> educations,
     required String educationText,
+    required bool educationPrivate,
     required List<Map<String, dynamic>> jobs,
     required String occupation,
     required String workplace,
+    required bool jobPrivate,
     required String blood,
+    required bool bloodPrivate,
   }) {
     switch (_tab) {
       case 'photos':
@@ -672,6 +724,12 @@ class _TreeMemberProfileSheetState extends State<_TreeMemberProfileSheet> {
           },
         );
       case 'job':
+        if (jobPrivate) {
+          return const _EmptyTab(
+            icon: Icons.work_outline,
+            message: 'Job is private',
+          );
+        }
         if (jobs.isNotEmpty) {
           return Column(
             children: [
@@ -696,6 +754,12 @@ class _TreeMemberProfileSheetState extends State<_TreeMemberProfileSheet> {
           message: 'No job added yet.',
         );
       case 'blood':
+        if (bloodPrivate && blood.isEmpty) {
+          return const _EmptyTab(
+            icon: Icons.water_drop_outlined,
+            message: 'Blood group is private',
+          );
+        }
         if (blood.isNotEmpty) {
           return Container(
             width: double.infinity,
@@ -728,6 +792,12 @@ class _TreeMemberProfileSheetState extends State<_TreeMemberProfileSheet> {
         );
       case 'education':
       default:
+        if (educationPrivate) {
+          return const _EmptyTab(
+            icon: Icons.school_outlined,
+            message: 'Education is private',
+          );
+        }
         if (educations.isNotEmpty) {
           return Column(
             children: [

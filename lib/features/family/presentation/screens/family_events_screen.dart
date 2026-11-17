@@ -5,11 +5,21 @@ import 'package:provider/provider.dart';
 import '../../../../app/theme.dart';
 import '../../../../core/widgets/ft_page.dart';
 import '../../../../core/widgets/responsive.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../data/family_api_service.dart';
 import '../../data/models/family_models.dart';
 import '../providers/family_providers.dart';
 
 const _kinds = ['birthday', 'anniversary', 'event'];
+
+String _wishDraft(Map<String, dynamic> event) {
+  final name = (event['memberName'] ?? 'there').toString();
+  final kind = (event['kind'] ?? event['type'] ?? 'event').toString().toLowerCase();
+  if (kind == 'birthday') return 'Happy birthday, $name!';
+  if (kind == 'anniversary') return 'Happy anniversary, $name!';
+  final title = (event['title'] ?? 'this event').toString();
+  return 'Thinking of you — $title';
+}
 
 class FamilyEventsScreen extends StatefulWidget {
   const FamilyEventsScreen({super.key});
@@ -112,15 +122,28 @@ class _FamilyEventsScreenState extends State<FamilyEventsScreen> {
       } else if (mdata is List) {
         mlist = mdata;
       }
+      final members = mlist
+          .whereType<Map>()
+          .map((e) => FamilyMember.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+      final byId = {for (final m in members) m.id: m};
       setState(() {
-        _events = list
-            .whereType<Map>()
-            .map((e) => Map<String, dynamic>.from(e))
-            .toList();
-        _members = mlist
-            .whereType<Map>()
-            .map((e) => FamilyMember.fromJson(Map<String, dynamic>.from(e)))
-            .toList();
+        _members = members;
+        _events = list.whereType<Map>().map((e) {
+          final map = Map<String, dynamic>.from(e);
+          final memberId =
+              (map['memberId'] ?? map['member_id'] ?? '').toString();
+          final member = byId[memberId];
+          map['memberName'] =
+              (map['memberName'] ?? member?.name ?? '').toString();
+          map['userId'] = (map['userId'] ??
+                  map['user_id'] ??
+                  member?.userId ??
+                  '')
+              .toString();
+          map['avatar'] = map['avatar'] ?? member?.avatar;
+          return map;
+        }).toList();
         _canAdd = canAdd;
       });
     } catch (e) {
@@ -303,6 +326,91 @@ class _FamilyEventsScreenState extends State<FamilyEventsScreen> {
       'anniversary' => const Color(0xFFF59E0B),
       _ => const Color(0xFF0EA5E9),
     };
+  }
+
+  bool _canWish(Map<String, dynamic> event) {
+    final userId = (event['userId'] ?? '').toString();
+    if (userId.isEmpty) return false;
+    final me = context.read<AuthProvider>().user?.id;
+    return me == null || userId != me;
+  }
+
+  Future<void> _openWish(Map<String, dynamic> event) async {
+    if (!_canWish(event)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This person does not have an account to message.'),
+        ),
+      );
+      return;
+    }
+    final familyId = context.read<FamilySessionProvider>().familyId;
+    if (familyId == null) return;
+    final controller = TextEditingController(text: _wishDraft(event));
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Send a wish'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              (event['memberName'] ?? event['title'] ?? 'Family member')
+                  .toString(),
+              style: AppTheme.body(weight: FontWeight.w800),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _kind(event),
+              style: AppTheme.body(size: 12, color: AppTheme.muted),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Write a wish',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Send'),
+          ),
+        ],
+      ),
+    );
+    final body = controller.text.trim();
+    controller.dispose();
+    if (ok != true || body.isEmpty || !mounted) return;
+    try {
+      await context.read<FamilyApiService>().sendFamilyChatMessage(
+            familyId,
+            (event['userId'] ?? '').toString(),
+            body,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Wish sent to ${event['memberName'] ?? 'them'}',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e')),
+      );
+    }
   }
 
   @override
@@ -525,11 +633,20 @@ class _FamilyEventsScreenState extends State<FamilyEventsScreen> {
                         subtitle: Text(
                           [
                             kind,
+                            if ((e['memberName'] ?? '').toString().isNotEmpty)
+                              e['memberName'].toString(),
                             _eventDate(e) == null
                                 ? ''
                                 : DateFormat.yMMMd().format(_eventDate(e)!),
                           ].where((x) => x.isNotEmpty).join(' · '),
                         ),
+                        trailing: _canWish(e)
+                            ? IconButton(
+                                tooltip: 'Send a wish',
+                                onPressed: () => _openWish(e),
+                                icon: const Icon(Icons.favorite_outline),
+                              )
+                            : null,
                         onTap: () => _openEditor(existing: e),
                       ),
                     );
@@ -552,6 +669,13 @@ class _FamilyEventsScreenState extends State<FamilyEventsScreen> {
                       subtitle: Text(
                         d == null ? '' : DateFormat.MMMd().format(d),
                       ),
+                      trailing: _canWish(e)
+                          ? IconButton(
+                              tooltip: 'Send a wish',
+                              onPressed: () => _openWish(e),
+                              icon: const Icon(Icons.favorite_outline),
+                            )
+                          : null,
                       onTap: () => _openEditor(existing: e),
                     );
                   }),
