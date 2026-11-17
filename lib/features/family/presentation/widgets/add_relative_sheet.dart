@@ -121,6 +121,7 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
   String? _existingMemberId;
   String? _photoPath;
   String? _phoneHint;
+  String? _emailHint;
   bool _phoneBlocked = false;
   bool _submitting = false;
   String? _error;
@@ -200,6 +201,30 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
                 : pending
                     ? 'Invitation already pending'
                     : '');
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _checkEmail() async {
+    final email = _email.text.trim().toLowerCase();
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() => _emailHint = null);
+      return;
+    }
+    try {
+      final res = await context
+          .read<FamilyApiService>()
+          .checkMemberEmail(widget.familyId, email);
+      final data = res.data is Map
+          ? Map<String, dynamic>.from(res.data as Map)
+          : <String, dynamic>{};
+      setState(() {
+        _emailHint = data['message']?.toString() ??
+            (data['alreadyMember'] == true
+                ? 'Already a family member'
+                : data['pendingInvitation'] == true
+                    ? 'Invitation already pending'
+                    : null);
       });
     } catch (_) {}
   }
@@ -420,14 +445,19 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
                       child: FilledButton(
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFFF97316),
+                          foregroundColor: Colors.black,
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           textStyle: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
+                            color: Colors.black,
                           ),
                         ),
                         onPressed: _pickPhoto,
-                        child: const Text('Upload'),
+                        child: const Text(
+                          'Upload',
+                          style: TextStyle(color: Colors.black),
+                        ),
                       ),
                     ),
                   ],
@@ -444,8 +474,13 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
                             ChoiceChip(
                               label: Text(
                                 g[0].toUpperCase() + g.substring(1),
-                                style: const TextStyle(fontSize: 12),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
+                              labelStyle: const TextStyle(color: Colors.black),
                               selected: _gender == g,
                               onSelected: (_) => setState(() => _gender = g),
                             ),
@@ -500,7 +535,11 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
                       Row(
                         children: [
                           ChoiceChip(
-                            label: const Text('Living'),
+                            label: const Text(
+                              'Living',
+                              style: TextStyle(color: Colors.black),
+                            ),
+                            labelStyle: const TextStyle(color: Colors.black),
                             selected: _isAlive,
                             onSelected: (_) => setState(() {
                               _isAlive = true;
@@ -508,7 +547,11 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
                           ),
                           const SizedBox(width: 8),
                           ChoiceChip(
-                            label: const Text('Not alive'),
+                            label: const Text(
+                              'Not alive',
+                              style: TextStyle(color: Colors.black),
+                            ),
+                            labelStyle: const TextStyle(color: Colors.black),
                             selected: !_isAlive,
                             onSelected: (_) => setState(() {
                               _isAlive = false;
@@ -641,9 +684,17 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _email,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Email (optional)',
+                    helperText: _emailHint,
+                    helperMaxLines: 2,
                   ),
+                  onChanged: (_) {
+                    if (_emailHint != null) {
+                      setState(() => _emailHint = null);
+                    }
+                  },
+                  onEditingComplete: _checkEmail,
                 ),
               ],
               const SizedBox(height: 8),
@@ -668,7 +719,7 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
                         height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: Colors.black,
                         ),
                       )
                     : Text(
@@ -812,7 +863,7 @@ class _SetRelationSheetState extends State<_SetRelationSheet> {
                       selectedColor: const Color(0xFFF97316),
                       labelStyle: TextStyle(
                         color: _relationship == opt.$1
-                            ? Colors.white
+                            ? Colors.black
                             : const Color(0xFF9A3412),
                         fontWeight: FontWeight.w700,
                       ),
@@ -850,7 +901,7 @@ class _SetRelationSheetState extends State<_SetRelationSheet> {
                           height: 16,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white,
+                            color: Colors.black,
                           ),
                         )
                       : const Text('Save on tree'),

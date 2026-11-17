@@ -460,7 +460,7 @@ class FamilyChatPanelState extends State<FamilyChatPanel> {
               IconButton.filled(
                 style: IconButton.styleFrom(
                   backgroundColor: AppTheme.accentPink,
-                  foregroundColor: Colors.white,
+                  foregroundColor: Colors.black,
                 ),
                 onPressed: _sending ? null : _send,
                 icon: _sending
@@ -469,7 +469,7 @@ class FamilyChatPanelState extends State<FamilyChatPanel> {
                         height: 16,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: Colors.black,
                         ),
                       )
                     : const Icon(Icons.send, size: 18),
@@ -538,7 +538,7 @@ class _FamilyChatDockState extends State<FamilyChatDock> {
         child: FloatingActionButton(
           heroTag: 'family_chat_fab',
           backgroundColor: AppTheme.accentPink,
-          foregroundColor: Colors.white,
+          foregroundColor: Colors.black,
           onPressed: () => _setMode(FamilyChatDockMode.expanded),
           child: const Icon(Icons.chat_bubble),
         ),

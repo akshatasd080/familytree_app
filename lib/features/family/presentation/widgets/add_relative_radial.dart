@@ -83,7 +83,7 @@ const addRelativeActions = <AddRelativeAction>[
   ),
 ];
 
-/// Radial picker matching web `AddRelativeRadial.jsx`.
+/// Mobile-safe relative picker (web radial adapted so nothing clips off-screen).
 class AddRelativeRadial extends StatelessWidget {
   const AddRelativeRadial({
     super.key,
@@ -98,6 +98,9 @@ class AddRelativeRadial extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
+    final narrow = size.width < 700;
+
     return Material(
       color: const Color(0x590F172A),
       child: SafeArea(
@@ -109,79 +112,235 @@ class AddRelativeRadial extends StatelessWidget {
                 onTap: onClose,
               ),
             ),
-            Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 520, maxHeight: 560),
-                child: AspectRatio(
-                  aspectRatio: 4 / 3.2,
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final w = constraints.maxWidth;
-                      final h = constraints.maxHeight;
-                      const center = Offset(0.50, 0.48);
-                      return Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          CustomPaint(
-                            size: Size(w, h),
-                            painter: _SpokePainter(
-                              center: Offset(center.dx * w, center.dy * h),
-                              ends: [
-                                for (final a in addRelativeActions)
-                                  Offset(a.x / 100 * w, a.y / 100 * h),
-                              ],
-                            ),
-                          ),
-                          Positioned(
-                            left: center.dx * w - 95,
-                            top: center.dy * h - 62,
-                            width: 190,
-                            child: _CenterCard(person: person),
-                          ),
-                          for (final action in addRelativeActions)
-                            Positioned(
-                              left: action.x / 100 * w - 79,
-                              top: action.y / 100 * h - 34,
-                              width: 158,
-                              child: _ActionCard(
-                                action: action,
-                                personName: person.name,
-                                onTap: () => onSelect(action),
-                              ),
-                            ),
-                          Positioned(
-                            top: 0,
-                            right: 0,
-                            child: TextButton(
-                              onPressed: onClose,
-                              style: TextButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: AppTheme.muted,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 8,
-                                ),
-                                shape: const StadiumBorder(),
-                              ),
-                              child: const Text(
-                                'Close',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    },
+            if (narrow)
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: _MobilePickerSheet(
+                  person: person,
+                  onSelect: onSelect,
+                  onClose: onClose,
+                ),
+              )
+            else
+              Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: 520,
+                    maxHeight: 560,
                   ),
+                  child: AspectRatio(
+                    aspectRatio: 4 / 3.2,
+                    child: _DesktopRadial(
+                      person: person,
+                      onSelect: onSelect,
+                      onClose: onClose,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet grid — always fits phone width.
+class _MobilePickerSheet extends StatelessWidget {
+  const _MobilePickerSheet({
+    required this.person,
+    required this.onSelect,
+    required this.onClose,
+  });
+
+  final FamilyMember person;
+  final ValueChanged<AddRelativeAction> onSelect;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        width: double.infinity,
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.78,
+        ),
+        margin: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.22),
+              blurRadius: 28,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 8, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Add relative',
+                      style: AppTheme.display(size: 18),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: onClose,
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: AppTheme.muted,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      shape: const StadiumBorder(),
+                    ),
+                    child: const Text(
+                      'Close',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+              child: _CenterCard(person: person),
+            ),
+            Flexible(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final wideEnough = constraints.maxWidth >= 340;
+                    return Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final action in addRelativeActions)
+                          SizedBox(
+                            width: wideEnough
+                                ? (constraints.maxWidth - 8) / 2
+                                : constraints.maxWidth,
+                            child: _ActionCard(
+                              action: action,
+                              personName: person.name,
+                              onTap: () => onSelect(action),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _DesktopRadial extends StatelessWidget {
+  const _DesktopRadial({
+    required this.person,
+    required this.onSelect,
+    required this.onClose,
+  });
+
+  final FamilyMember person;
+  final ValueChanged<AddRelativeAction> onSelect;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        final h = constraints.maxHeight;
+        const center = Offset(0.50, 0.48);
+        const cardW = 150.0;
+        const pad = 8.0;
+
+        double clampLeft(double xPercent) {
+          final raw = xPercent / 100 * w - cardW / 2;
+          return raw.clamp(pad, w - cardW - pad);
+        }
+
+        double clampTop(double yPercent, {double cardH = 68}) {
+          final raw = yPercent / 100 * h - cardH / 2;
+          return raw.clamp(pad + 36, h - cardH - pad);
+        }
+
+        return Stack(
+          clipBehavior: Clip.hardEdge,
+          children: [
+            CustomPaint(
+              size: Size(w, h),
+              painter: _SpokePainter(
+                center: Offset(center.dx * w, center.dy * h),
+                ends: [
+                  for (final a in addRelativeActions)
+                    Offset(
+                      clampLeft(a.x) + cardW / 2,
+                      clampTop(a.y) + 34,
+                    ),
+                ],
+              ),
+            ),
+            Positioned(
+              left: (center.dx * w - 95).clamp(pad, w - 190 - pad),
+              top: (center.dy * h - 62).clamp(pad + 36, h - 130 - pad),
+              width: 190,
+              child: _CenterCard(person: person),
+            ),
+            for (final action in addRelativeActions)
+              Positioned(
+                left: clampLeft(action.x),
+                top: clampTop(action.y),
+                width: cardW,
+                child: _ActionCard(
+                  action: action,
+                  personName: person.name,
+                  onTap: () => onSelect(action),
+                ),
+              ),
+            Positioned(
+              top: pad,
+              right: pad,
+              child: TextButton(
+                onPressed: onClose,
+                style: TextButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: AppTheme.muted,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
+                  shape: const StadiumBorder(),
+                ),
+                child: const Text(
+                  'Close',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -194,6 +353,7 @@ class _CenterCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
@@ -205,34 +365,42 @@ class _CenterCard extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 24,
-            offset: const Offset(0, 10),
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
         children: [
-          _AvatarFace(gender: _guessGender(person), size: 48),
-          const SizedBox(height: 6),
-          Text(
-            person.name,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 13,
-              color: Color(0xFF1E293B),
+          _AvatarFace(gender: _guessGender(person), size: 44),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  person.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 14,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+                Text(
+                  person.relationship ?? 'Family',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+              ],
             ),
-          ),
-          Text(
-            person.relationship ?? '',
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
           ),
         ],
       ),
@@ -260,7 +428,7 @@ class _ActionCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
@@ -275,9 +443,9 @@ class _ActionCard extends StatelessWidget {
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.12),
-                blurRadius: 14,
-                offset: const Offset(0, 6),
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
             ],
           ),

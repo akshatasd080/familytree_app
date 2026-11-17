@@ -696,7 +696,7 @@ class FamilyRoomPanelState extends State<FamilyRoomPanel> {
               IconButton.filled(
                 style: IconButton.styleFrom(
                   backgroundColor: AppTheme.accentPink,
-                  foregroundColor: Colors.white,
+                  foregroundColor: Colors.black,
                 ),
                 onPressed: _sending ? null : _send,
                 icon: const Icon(Icons.send, size: 18),

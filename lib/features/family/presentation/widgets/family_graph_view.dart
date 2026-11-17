@@ -1,7 +1,11 @@
+import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
@@ -17,12 +21,14 @@ class FamilyGraphView extends StatefulWidget {
     required this.relationships,
     this.focusUserId,
     this.meUserId,
+    this.selectedId,
     this.canAdd = false,
     this.showExpand = false,
     this.onMemberTap,
     this.onAdd,
     this.onLink,
     this.onExpand,
+    this.onMakeAdmin,
     this.transformationController,
   });
 
@@ -30,19 +36,22 @@ class FamilyGraphView extends StatefulWidget {
   final List<Map<String, dynamic>> relationships;
   final String? focusUserId;
   final String? meUserId;
+  final String? selectedId;
   final bool canAdd;
   final bool showExpand;
   final ValueChanged<FamilyMember>? onMemberTap;
   final ValueChanged<FamilyMember>? onAdd;
   final ValueChanged<FamilyMember>? onLink;
   final ValueChanged<FamilyMember>? onExpand;
+  final ValueChanged<FamilyMember>? onMakeAdmin;
   final TransformationController? transformationController;
 
   @override
-  State<FamilyGraphView> createState() => _FamilyGraphViewState();
+  State<FamilyGraphView> createState() => FamilyGraphViewState();
 }
 
-class _FamilyGraphViewState extends State<FamilyGraphView> {
+class FamilyGraphViewState extends State<FamilyGraphView> {
+  FamilyLayoutResult? _lastLayout;
   late final TransformationController _tx;
   bool _ownsTx = false;
   Size _viewport = Size.zero;
@@ -70,6 +79,203 @@ class _FamilyGraphViewState extends State<FamilyGraphView> {
       _fitSignature = null;
       _scheduleFit();
     }
+  }
+
+  /// Center a member in the viewport (web `focusNode`).
+  bool focusMember(String memberId) {
+    final layout = _lastLayout;
+    if (layout == null || _viewport == Size.zero) return false;
+    Map<String, dynamic>? node;
+    for (final n in layout.nodes) {
+      if ((n['id'] ?? '').toString() == memberId) {
+        node = n;
+        break;
+      }
+    }
+    if (node == null) return false;
+    final x = (node['x'] as num?)?.toDouble() ?? 0;
+    final y = (node['y'] as num?)?.toDouble() ?? 0;
+    final w = (node['w'] as num?)?.toDouble() ?? nodeW;
+    final h = (node['h'] as num?)?.toDouble() ?? nodeH;
+    final scale = _zoom.clamp(0.7, 1.6);
+    final focalX = x + w / 2;
+    final focalY = y + h / 2;
+    final dx = _viewport.width / 2 - focalX * scale;
+    final dy = _viewport.height / 2 - focalY * scale;
+    _tx.value = Matrix4.identity()
+      ..translateByDouble(dx, dy, 0, 1)
+      ..scaleByDouble(scale, scale, 1, 1);
+    setState(() {});
+    return true;
+  }
+
+  /// Export PNG (web download parity) and open the share sheet.
+  Future<void> exportPng(String familyName) async {
+    final layout = _lastLayout;
+    if (layout == null || layout.nodes.isEmpty) {
+      throw Exception('Add family members before downloading the tree');
+    }
+
+    const pad = 28.0;
+    const header = 56.0;
+    const footer = 40.0;
+    final width = layout.width + pad * 2;
+    final height = layout.height + header + footer;
+    const pixelRatio = 2.0;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.scale(pixelRatio);
+
+    final bg = Paint()..color = const Color(0xFFF8FAFC);
+    canvas.drawRect(Rect.fromLTWH(0, 0, width, height), bg);
+
+    final titlePainter = TextPainter(
+      text: TextSpan(
+        text: familyName,
+        style: const TextStyle(
+          color: Color(0xFF0F172A),
+          fontSize: 22,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: width - pad * 2);
+    titlePainter.paint(canvas, Offset(pad, 18));
+
+    canvas.save();
+    canvas.translate(pad, header);
+
+    for (final band in layout.bands) {
+      canvas.drawRect(
+        Rect.fromLTWH(0, band.y, layout.width, band.height),
+        Paint()..color = _parseHex(band.bg).withValues(alpha: 0.55),
+      );
+      final label = TextPainter(
+        text: TextSpan(
+          text: band.title,
+          style: TextStyle(
+            color: _parseHex(band.ink),
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout(maxWidth: 160);
+      label.paint(canvas, Offset(12, band.y + 16));
+    }
+
+    for (final edge in layout.edges) {
+      if (edge.points.length < 2) continue;
+      final paint = Paint()
+        ..color = edge.kind == 'spouse'
+            ? const Color(0xFFE11D48)
+            : edge.kind == 'sibling'
+                ? const Color(0xFF7C3AED)
+                : const Color(0xFF2563EB)
+        ..strokeWidth = edge.kind == 'spouse' ? 2.8 : 2.4
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round;
+      final path = Path()..moveTo(edge.points.first.dx, edge.points.first.dy);
+      for (var i = 1; i < edge.points.length; i++) {
+        path.lineTo(edge.points[i].dx, edge.points[i].dy);
+      }
+      canvas.drawPath(path, paint);
+    }
+
+    for (final node in layout.nodes) {
+      final x = (node['x'] as num?)?.toDouble() ?? 0;
+      final y = (node['y'] as num?)?.toDouble() ?? 0;
+      final w = (node['w'] as num?)?.toDouble() ?? nodeW;
+      final h = (node['h'] as num?)?.toDouble() ?? nodeH;
+      final name = (node['name'] ?? 'Member').toString();
+      final role = (node['treeRole'] ?? node['relationship'] ?? 'Family').toString();
+      final isMe = _nodeIsMe(node);
+      final rrect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, y, w, h),
+        const Radius.circular(12),
+      );
+      canvas.drawRRect(rrect, Paint()..color = Colors.white);
+      canvas.drawRRect(
+        rrect,
+        Paint()
+          ..color = isMe ? const Color(0xFFF59E0B) : const Color(0xFFE2E8F0)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = isMe ? 2.5 : 1.5,
+      );
+      final nameTp = TextPainter(
+        text: TextSpan(
+          text: name,
+          style: const TextStyle(
+            color: Color(0xFF0F172A),
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+        ellipsis: '…',
+      )..layout(maxWidth: w - 24);
+      nameTp.paint(canvas, Offset(x + 14, y + 28));
+      final roleTp = TextPainter(
+        text: TextSpan(
+          text: isMe ? 'You' : role,
+          style: const TextStyle(
+            color: Color(0xFF1D4ED8),
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+        ellipsis: '…',
+      )..layout(maxWidth: w - 24);
+      roleTp.paint(canvas, Offset(x + 14, y + 48));
+    }
+
+    canvas.restore();
+
+    final legend = TextPainter(
+      text: const TextSpan(
+        text: 'Blue: parent – child     Rose: spouse     Violet: siblings',
+        style: TextStyle(
+          color: Color(0xFF475569),
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: width - pad * 2);
+    legend.paint(canvas, Offset(pad, height - 28));
+
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(
+      (width * pixelRatio).ceil(),
+      (height * pixelRatio).ceil(),
+    );
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (bytes == null) throw Exception('Could not download the tree');
+
+    final safe = familyName.replaceAll(RegExp(r'[^\w\- ]+'), '').trim();
+    final dir = await getTemporaryDirectory();
+    final file = File(
+      '${dir.path}/${safe.isEmpty ? 'family-tree' : safe}-family-tree.png',
+    );
+    await file.writeAsBytes(bytes.buffer.asUint8List());
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path)],
+        text: '$familyName family tree',
+      ),
+    );
+  }
+
+  bool _nodeIsMe(Map<String, dynamic> node) {
+    final me = widget.meUserId;
+    if (me == null || me.isEmpty) return false;
+    final userId = (node['userId'] ?? node['user_id'] ?? '').toString();
+    final id = (node['id'] ?? '').toString();
+    return userId == me || id == me;
   }
 
   @override
@@ -160,6 +366,7 @@ class _FamilyGraphViewState extends State<FamilyGraphView> {
     final focus =
         widget.focusUserId ?? resolveDefaultFocusUserId(memberMaps, null);
     final layout = buildFamilyLayout(memberMaps, rels, focus);
+    _lastLayout = layout;
     final byId = {for (final m in widget.members) m.id: m};
     _content = Size(layout.width, layout.height);
 
@@ -238,7 +445,9 @@ class _FamilyGraphViewState extends State<FamilyGraphView> {
                         final h =
                             (node['h'] as num?)?.toDouble() ?? nodeH;
                         final treeRole = node['treeRole']?.toString();
-                        final isMe = _isMe(member, focus);
+                        final isMe = _isLoggedIn(member);
+                        final isFocus = _isFocus(member, focus);
+                        final selected = widget.selectedId == member.id;
                         return Positioned(
                           left: x,
                           top: y,
@@ -248,6 +457,8 @@ class _FamilyGraphViewState extends State<FamilyGraphView> {
                             member: member,
                             treeRole: treeRole,
                             isMe: isMe,
+                            isFocus: isFocus,
+                            selected: selected,
                             canAdd: widget.canAdd,
                             showExpand: widget.showExpand,
                             onTap: () =>
@@ -261,9 +472,37 @@ class _FamilyGraphViewState extends State<FamilyGraphView> {
                             onExpand: widget.onExpand == null
                                 ? null
                                 : () => widget.onExpand!(member),
+                            onMakeAdmin: widget.onMakeAdmin == null ||
+                                    member.isOwner ||
+                                    !member.hasLoginAccount
+                                ? null
+                                : () => widget.onMakeAdmin!(member),
                           ),
                         );
                       }),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: 10,
+              bottom: 10,
+              child: Material(
+                color: AppTheme.card.withValues(alpha: 0.96),
+                elevation: 2,
+                borderRadius: BorderRadius.circular(10),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _LegendRow(color: Color(0xFF2563EB), label: 'Parent–child'),
+                      SizedBox(height: 4),
+                      _LegendRow(color: Color(0xFFE11D48), label: 'Spouse'),
+                      SizedBox(height: 4),
+                      _LegendRow(color: Color(0xFF7C3AED), label: 'Siblings'),
                     ],
                   ),
                 ),
@@ -332,18 +571,48 @@ class _FamilyGraphViewState extends State<FamilyGraphView> {
     );
   }
 
-  bool _isMe(FamilyMember member, String? focus) {
+  bool _isLoggedIn(FamilyMember member) {
     final me = widget.meUserId;
-    if (me != null && (member.userId == me || member.id == me)) {
-      return true;
-    }
-    if (focus != null &&
-        (member.userId == focus || member.id == focus)) {
-      return true;
-    }
-    final rel =
-        (member.relationship ?? '').toLowerCase().replaceAll(' ', '');
-    return rel == 'sitecreator';
+    if (me == null || me.isEmpty) return false;
+    return member.userId == me || member.id == me;
+  }
+
+  bool _isFocus(FamilyMember member, String? focus) {
+    if (focus == null || focus.isEmpty) return false;
+    return member.userId == focus || member.id == focus;
+  }
+}
+
+class _LegendRow extends StatelessWidget {
+  const _LegendRow({required this.color, required this.label});
+
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 14,
+          height: 3,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(99),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF475569),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -400,6 +669,8 @@ class _MemberNode extends StatelessWidget {
   const _MemberNode({
     required this.member,
     required this.isMe,
+    required this.isFocus,
+    required this.selected,
     required this.canAdd,
     required this.showExpand,
     this.treeRole,
@@ -407,38 +678,62 @@ class _MemberNode extends StatelessWidget {
     this.onAdd,
     this.onLink,
     this.onExpand,
+    this.onMakeAdmin,
   });
 
   final FamilyMember member;
   final String? treeRole;
   final bool isMe;
+  final bool isFocus;
+  final bool selected;
   final bool canAdd;
   final bool showExpand;
   final VoidCallback? onTap;
   final VoidCallback? onAdd;
   final VoidCallback? onLink;
   final VoidCallback? onExpand;
+  final VoidCallback? onMakeAdmin;
+
+  String get _roleLabel {
+    if (isMe) return 'You';
+    final role = (treeRole ?? '').trim();
+    if (role.isNotEmpty) return role;
+    final rel = (member.relationship ?? '').trim();
+    if (rel.isNotEmpty &&
+        rel.toLowerCase().replaceAll(RegExp(r'[\s_-]+'), '') != 'sitecreator') {
+      return rel;
+    }
+    final gender = (member.gender ?? '').trim();
+    if (gender.isNotEmpty) return gender;
+    return 'Family';
+  }
 
   @override
   Widget build(BuildContext context) {
     final photo = mediaUrl(member.avatar);
-    final pending = (member.status ?? '').toLowerCase().contains('pending');
-    final roleLabel = isMe ? 'You' : (member.relationship ?? treeRole ?? '');
+    final pending =
+        member.invitePending || (member.status ?? '').toLowerCase().contains('pending');
+    final roleLabel = _roleLabel;
+    final borderColor = selected
+        ? AppTheme.forest
+        : isMe
+            ? const Color(0xFFFBBF24)
+            : isFocus
+                ? const Color(0xFF38BDF8)
+                : pending
+                    ? const Color(0xFFFECACA)
+                    : AppTheme.border;
 
     return Material(
       color: Colors.transparent,
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
         decoration: BoxDecoration(
-          color: AppTheme.card,
+          color: selected ? const Color(0xFFECFDF5) : AppTheme.card,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isMe
-                ? const Color(0xFFFBBF24)
-                : pending
-                    ? const Color(0xFFFECACA)
-                    : AppTheme.border,
-            width: isMe ? 2.5 : 1.2,
+            color: borderColor,
+            width: selected || isMe || isFocus ? 2.5 : 1.2,
           ),
           boxShadow: [
             BoxShadow(
@@ -539,6 +834,26 @@ class _MemberNode extends StatelessWidget {
                                     ),
                                   ),
                                 ),
+                              if (member.isAdmin && !isMe)
+                                Container(
+                                  margin: const EdgeInsets.only(left: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE0F2FE),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: const Text(
+                                    'ADMIN',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(0xFF0369A1),
+                                    ),
+                                  ),
+                                ),
                               if (pending)
                                 Container(
                                   margin: const EdgeInsets.only(left: 4),
@@ -569,10 +884,12 @@ class _MemberNode extends StatelessWidget {
                             roleLabel,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
-                              color: Color(0xFF1E40AF),
+                              color: isFocus && !isMe
+                                  ? const Color(0xFF0284C7)
+                                  : const Color(0xFF1E40AF),
                             ),
                           ),
                         ],
@@ -592,11 +909,22 @@ class _MemberNode extends StatelessWidget {
                   border: AppTheme.borderSoft,
                   onTap: onTap,
                 ),
+                if (onMakeAdmin != null) ...[
+                  const SizedBox(width: 6),
+                  _NodeAction(
+                    icon: member.isAdmin
+                        ? Icons.shield_outlined
+                        : Icons.admin_panel_settings_outlined,
+                    color: const Color(0xFF0369A1),
+                    bg: const Color(0xFFE0F2FE),
+                    onTap: onMakeAdmin,
+                  ),
+                ],
                 if (canAdd && onLink != null) ...[
                   const SizedBox(width: 6),
                   _NodeAction(
                     icon: Icons.link,
-                    color: Colors.white,
+                    color: Colors.black,
                     bg: const Color(0xFFF97316),
                     onTap: onLink,
                   ),
@@ -605,7 +933,7 @@ class _MemberNode extends StatelessWidget {
                   const SizedBox(width: 6),
                   _NodeAction(
                     icon: Icons.add,
-                    color: Colors.white,
+                    color: Colors.black,
                     bg: const Color(0xFF059669),
                     onTap: onAdd,
                   ),
@@ -677,12 +1005,14 @@ class _LayoutEdgePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     for (final edge in edges) {
       if (edge.points.length < 2) continue;
-      final isSpouse = edge.kind == 'spouse';
+      final color = switch (edge.kind) {
+        'spouse' => const Color(0xFFE11D48).withValues(alpha: 0.8),
+        'sibling' => const Color(0xFF7C3AED).withValues(alpha: 0.8),
+        _ => const Color(0xFF2563EB).withValues(alpha: 0.78),
+      };
       final paint = Paint()
-        ..color = isSpouse
-            ? AppTheme.accentPink.withValues(alpha: 0.75)
-            : const Color(0xFF2563EB).withValues(alpha: 0.72)
-        ..strokeWidth = isSpouse ? 3.2 : 2.8
+        ..color = color
+        ..strokeWidth = edge.kind == 'spouse' ? 3.2 : 2.8
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;

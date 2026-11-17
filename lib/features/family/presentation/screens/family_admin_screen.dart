@@ -296,7 +296,7 @@ class _FamilyAdminScreenState extends State<FamilyAdminScreen> {
                                 height: 18,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: Colors.white,
+                                  color: Colors.black,
                                 ),
                               )
                             : const Text('Save'),

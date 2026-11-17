@@ -864,7 +864,7 @@ class _MemberEditSheetState extends State<_MemberEditSheet> {
                             height: 18,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.white,
+                              color: Colors.black,
                             ),
                           )
                         : const Text('Update Member'),

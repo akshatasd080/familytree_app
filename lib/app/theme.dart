@@ -85,11 +85,20 @@ class AppTheme {
 
   static ThemeData _build(Brightness brightness) {
     final dark = brightness == Brightness.dark;
+    // Keep button/chip label text black on brand-colored surfaces (app-wide).
     final scheme = ColorScheme.fromSeed(
       seedColor: _accent,
       primary: _accent,
       brightness: brightness,
       surface: dark ? const Color(0xFF121816) : canvas,
+    ).copyWith(
+      onPrimary: Colors.black,
+      onSecondary: Colors.black,
+      onTertiary: Colors.black,
+      onPrimaryContainer: Colors.black,
+      onSecondaryContainer: Colors.black,
+      onTertiaryContainer: Colors.black,
+      onError: Colors.black,
     );
     final base = ThemeData(
       useMaterial3: true,
@@ -146,33 +155,74 @@ class AppTheme {
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: _accent,
-          foregroundColor: Colors.white,
+          foregroundColor: Colors.black,
           textStyle: GoogleFonts.outfit(
             fontWeight: FontWeight.w700,
             fontSize: 14,
+            color: Colors.black,
           ),
+          iconColor: Colors.black,
           minimumSize: const Size.fromHeight(48),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          foregroundColor: Colors.black,
+          textStyle: GoogleFonts.outfit(
+            fontWeight: FontWeight.w700,
+            color: Colors.black,
+          ),
+          iconColor: Colors.black,
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: Colors.black,
+          textStyle: GoogleFonts.outfit(
+            fontWeight: FontWeight.w700,
+            color: Colors.black,
+          ),
+          iconColor: Colors.black,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: _accent,
+          foregroundColor: Colors.black,
           side: BorderSide(color: border),
-          textStyle: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+          textStyle: GoogleFonts.outfit(
+            fontWeight: FontWeight.w600,
+            color: Colors.black,
+          ),
+          iconColor: Colors.black,
           minimumSize: const Size.fromHeight(48),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
         ),
       ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        foregroundColor: Colors.black,
+        backgroundColor: _accent,
+      ),
       chipTheme: ChipThemeData(
         backgroundColor: cream,
         selectedColor: _accent,
-        labelStyle:
-            GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600),
+        disabledColor: cream,
+        secondarySelectedColor: _accent,
+        labelStyle: GoogleFonts.outfit(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: Colors.black,
+        ),
+        secondaryLabelStyle: GoogleFonts.outfit(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: Colors.black,
+        ),
+        checkmarkColor: Colors.black,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
       navigationBarTheme: NavigationBarThemeData(

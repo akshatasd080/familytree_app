@@ -295,7 +295,7 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
                                     child: Icon(
                                       Icons.photo_camera,
                                       size: 14,
-                                      color: Colors.white,
+                                      color: Colors.black,
                                     ),
                                   ),
                                 ),
@@ -485,7 +485,7 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
                             height: 18,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.white,
+                              color: Colors.black,
                             ),
                           )
                         : const Text('Save profile'),

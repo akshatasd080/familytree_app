@@ -319,7 +319,7 @@ class _FamilyEventsScreenState extends State<FamilyEventsScreen> {
           ? FloatingActionButton(
               onPressed: () => _openEditor(),
               backgroundColor: AppTheme.forest,
-              child: const Icon(Icons.add, color: Colors.white),
+              child: const Icon(Icons.add, color: Colors.black),
             )
           : null,
       body: _loading

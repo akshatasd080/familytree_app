@@ -582,7 +582,7 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen>
           ? FloatingActionButton.extended(
               onPressed: _compose,
               backgroundColor: AppTheme.accentPink,
-              foregroundColor: Colors.white,
+              foregroundColor: Colors.black,
               icon: const Icon(Icons.add_a_photo),
               label: const Text('Post'),
             )

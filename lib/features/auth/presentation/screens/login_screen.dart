@@ -629,7 +629,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 height: 18,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: Colors.white,
+                  color: Colors.black,
                 ),
               )
             : const Text('Sign in'),
@@ -673,7 +673,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 height: 18,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: Colors.white,
+                  color: Colors.black,
                 ),
               )
             : const Text('Check membership'),
@@ -745,7 +745,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 height: 16,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: Colors.white,
+                                  color: Colors.black,
                                 ),
                               )
                             : const Icon(Icons.send, size: 18),
@@ -775,7 +775,7 @@ class _LoginScreenState extends State<LoginScreen> {
           IconButton.filled(
             style: IconButton.styleFrom(backgroundColor: AppTheme.forest),
             onPressed: _searchFamilies,
-            icon: const Icon(Icons.search, color: Colors.white),
+            icon: const Icon(Icons.search, color: Colors.black),
           ),
         ],
       ),

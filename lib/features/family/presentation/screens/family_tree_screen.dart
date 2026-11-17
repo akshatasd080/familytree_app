@@ -2,16 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../app/theme.dart';
+import '../../../../core/utils/media_url.dart';
 import '../../../../core/widgets/ft_page.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../data/family_api_service.dart';
 import '../../data/models/family_models.dart';
 import '../../domain/ego_tree.dart';
+import '../../domain/family_graph_layout.dart';
 import '../providers/family_providers.dart';
 import '../widgets/add_relative_radial.dart';
 import '../widgets/add_relative_sheet.dart';
 import '../widgets/family_chat_panel.dart';
 import '../widgets/family_graph_view.dart';
+import '../widgets/tree_member_profile_sheet.dart';
+
+const _maxAncestorDepth = 12;
 
 class FamilyTreeScreen extends StatefulWidget {
   const FamilyTreeScreen({super.key});
@@ -21,15 +26,24 @@ class FamilyTreeScreen extends StatefulWidget {
 }
 
 class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
+  final _graphKey = GlobalKey<FamilyGraphViewState>();
+  final _search = TextEditingController();
+
   FamilyTreeData? _tree;
   bool _loading = true;
+  bool _downloading = false;
   String? _error;
   String _scope = 'full';
+  String _viewMode = 'diagram'; // diagram | generations
+  String _generationFilter = 'all';
+  int _ancestorDepth = 1;
   FamilyMember? _selected;
   FamilyMember? _radialPerson;
   String? _role;
+  String? _focusOverrideId;
   String? _chatPeerUserId;
   int _chatDockNonce = 0;
+  bool _searchOpen = false;
 
   @override
   void initState() {
@@ -37,34 +51,85 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
-  String? get _myFocusId {
-    final user = context.read<AuthProvider>().user;
-    final members = _tree?.members ?? const <FamilyMember>[];
-    return resolveDefaultFocusUserId(
-      members
-          .map(
-            (m) => <String, dynamic>{
-              'id': m.id,
-              'userId': m.userId,
-              'user_id': m.userId,
-              'name': m.name,
-              'relationship': m.relationship,
-              'profileInfo': m.profileInfo,
-              'profile_info': m.profileInfo,
-            },
-          )
-          .toList(),
-      user?.toJson(),
-    );
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
   }
 
+  List<MemberMap> get _memberMaps => (_tree?.members ?? const <FamilyMember>[])
+      .map(_memberToMap)
+      .toList();
+
+  String? get _myFocusId {
+    final user = context.read<AuthProvider>().user;
+    return resolveDefaultFocusUserId(_memberMaps, user?.toJson());
+  }
+
+  String? get _focusId => _focusOverrideId ?? _myFocusId;
+
   bool get _isAdmin => (_role ?? '').toLowerCase() == 'admin';
+
+  bool get _viewingSelf {
+    final mine = _myFocusId;
+    final focus = _focusId;
+    if (mine == null || focus == null) return true;
+    return mine == focus;
+  }
 
   bool get _canAddOnTree {
     if (_isAdmin) return true;
     if ((_role ?? '').toLowerCase() == 'viewer') return false;
-    // Non-admin: only My circle on own tree (web parity).
-    return _scope == 'near';
+    return _scope == 'near' && _viewingSelf;
+  }
+
+  GenerationLayersResult get _generationData {
+    final filled = detectFilledAncestorDepth(_memberMaps, _focusId);
+    final depth = mathMax(_ancestorDepth, mathMax(filled, 1));
+    return buildGenerationLayers(_memberMaps, _focusId, depth, 2);
+  }
+
+  List<GenerationLayer> get _visibleGenerationLayers {
+    final layers = _generationData.layers;
+    if (_generationFilter == 'all') return layers;
+    return layers
+        .where((layer) => layer.level.toString() == _generationFilter)
+        .toList();
+  }
+
+  List<FamilyMember> get _searchPool {
+    final maps = _memberMaps;
+    final byKey = <String, FamilyMember>{};
+    for (final m in _tree?.members ?? const <FamilyMember>[]) {
+      byKey[m.id] = m;
+      if ((m.userId ?? '').isNotEmpty) byKey[m.userId!] = m;
+    }
+    final out = <FamilyMember>[];
+    final seen = <String>{};
+    for (final map in maps) {
+      final key = memberKey(map);
+      final member = byKey[key] ??
+          byKey[memberUserId(map)] ??
+          FamilyMember.fromJson(map);
+      if (seen.add(member.id)) out.add(member);
+    }
+    return out;
+  }
+
+  List<FamilyMember> get _searchMatches {
+    final q = _search.text.trim().toLowerCase();
+    if (q.isEmpty) return const [];
+    return _searchPool.where((m) {
+      final phone = (m.phone ?? '').replaceAll(RegExp(r'\D'), '');
+      final hay = [
+        m.name,
+        m.relationship,
+        phone,
+        m.email,
+        m.location,
+      ].whereType<String>().join(' ').toLowerCase();
+      return hay.contains(q);
+    }).take(12).toList();
   }
 
   /// Join-approved / loosely linked people not yet placed on the graph.
@@ -73,7 +138,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     final relationships = _tree?.relationships ?? const <Map<String, dynamic>>[];
     if (people.isEmpty) return const [];
 
-    final focus = (_myFocusId ?? '').toString();
+    final focus = (_focusId ?? '').toString();
     FamilyMember? root;
     for (final m in people) {
       if ((m.userId ?? '') == focus || m.id == focus) {
@@ -163,15 +228,102 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
           ? Map<String, dynamic>.from(res.data as Map)
           : <String, dynamic>{};
       final tree = FamilyTreeData.fromJson(data);
+      final maps = tree.members.map(_memberToMap).toList();
+      if (!mounted) return;
+      final focus = _focusOverrideId ??
+          resolveDefaultFocusUserId(
+            maps,
+            context.read<AuthProvider>().user?.toJson(),
+          );
+      final filled = detectFilledAncestorDepth(maps, focus);
       setState(() {
         _tree = tree;
         _role = tree.role;
+        _ancestorDepth = mathMax(_ancestorDepth, mathMax(filled, 1));
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _jumpToMember(FamilyMember member) async {
+    setState(() {
+      _selected = member;
+      _viewMode = 'diagram';
+      _scope = 'full';
+      _searchOpen = false;
+      _search.clear();
+    });
+    await _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _graphKey.currentState?.focusMember(member.id);
+    });
+  }
+
+  Future<void> _openMemberProfile(FamilyMember member) async {
+    final familyId = context.read<FamilySessionProvider>().familyId;
+    if (familyId == null) return;
+    setState(() => _selected = member);
+
+    String? treeRole;
+    try {
+      final layout = buildFamilyLayout(
+        _memberMaps,
+        _tree?.relationships ?? const [],
+        _focusId,
+      );
+      for (final node in layout.nodes) {
+        if ((node['id'] ?? '').toString() == member.id) {
+          treeRole = node['treeRole']?.toString();
+          break;
+        }
+      }
+    } catch (_) {}
+
+    await showTreeMemberProfileSheet(
+      context: context,
+      member: member,
+      familyId: familyId,
+      members: _tree?.members ?? const [],
+      relationships: _tree?.relationships ?? const [],
+      focusUserId: _focusId,
+      meUserId: context.read<AuthProvider>().user?.id,
+      isAdmin: _isAdmin,
+      onChanged: _load,
+      treeRole: treeRole,
+      onShowTheirTree: member.hasLoginAccount
+          ? () => _showTheirTree(member)
+          : null,
+      onChat: member.hasLoginAccount && member.isAlive
+          ? () {
+              setState(() {
+                _chatPeerUserId = member.userId;
+                _chatDockNonce++;
+                _selected = null;
+              });
+            }
+          : null,
+      onMakeAdmin: _isAdmin ? _toggleAdmin : null,
+      onOpenKin: (kin) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _openMemberProfile(kin);
+        });
+      },
+    );
+  }
+
+  Future<void> _showTheirTree(FamilyMember member) async {
+    final id = member.userId ?? member.id;
+    setState(() {
+      _focusOverrideId = id;
+      _selected = null;
+      _generationFilter = 'all';
+      _viewMode = 'diagram';
+    });
   }
 
   Future<void> _openAdd(FamilyMember person) async {
@@ -203,7 +355,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
       relatedTo: anchor,
       relationship: action.relationship,
       gender: action.gender,
-      focusUserId: _myFocusId,
+      focusUserId: _focusId,
     );
     if (ok) await _load();
   }
@@ -226,7 +378,10 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
 
   Future<void> _toggleAdmin(FamilyMember person) async {
     final familyId = context.read<FamilySessionProvider>().familyId;
-    if (!_isAdmin || familyId == null || person.isOwner || !person.hasLoginAccount) {
+    if (!_isAdmin ||
+        familyId == null ||
+        person.isOwner ||
+        !person.hasLoginAccount) {
       return;
     }
     final nextAdmin = !person.isAdmin;
@@ -263,18 +418,16 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
             nextAdmin,
           );
       final updated = res.data is Map ? res.data['member'] : null;
-      final nextIsAdmin = updated is Map
-          ? updated['isAdmin'] == true
-          : nextAdmin;
+      final nextIsAdmin =
+          updated is Map ? updated['isAdmin'] == true : nextAdmin;
       setState(() {
         final current = _tree;
         if (current == null) return;
         _tree = FamilyTreeData(
           members: current.members
               .map(
-                (m) => m.id == person.id
-                    ? m.copyWith(isAdmin: nextIsAdmin)
-                    : m,
+                (m) =>
+                    m.id == person.id ? m.copyWith(isAdmin: nextIsAdmin) : m,
               )
               .toList(),
           relationships: current.relationships,
@@ -284,105 +437,6 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
           _selected = _selected!.copyWith(isAdmin: nextIsAdmin);
         }
       });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
-    }
-  }
-
-  Future<void> _manageRelationships(FamilyMember person) async {
-    final familyId = context.read<FamilySessionProvider>().familyId;
-    if (!_isAdmin || familyId == null) return;
-    final rels = (_tree?.relationships ?? const [])
-        .where((r) {
-          final source = (r['source'] ?? '').toString();
-          final target = (r['target'] ?? '').toString();
-          return source == person.id || target == person.id;
-        })
-        .where((r) {
-          final type =
-              (r['type'] ?? r['relationship_type'] ?? '').toString().toLowerCase();
-          return type.isNotEmpty && type != 'other' && type != 'unknown';
-        })
-        .toList();
-    if (rels.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No removable relationships for this person')),
-      );
-      return;
-    }
-
-    final byId = {for (final m in _tree?.members ?? const <FamilyMember>[]) m.id: m};
-    final picked = await showModalBottomSheet<Map<String, dynamic>>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-              child: Text(
-                'Remove a relationship',
-                style: AppTheme.display(size: 18),
-              ),
-            ),
-            for (final r in rels)
-              ListTile(
-                title: Text(
-                  () {
-                    final source = (r['source'] ?? '').toString();
-                    final target = (r['target'] ?? '').toString();
-                    final otherId = source == person.id ? target : source;
-                    final other = byId[otherId]?.name ?? otherId;
-                    final type = (r['type'] ?? r['relationship_type'] ?? 'link')
-                        .toString();
-                    return '$type · $other';
-                  }(),
-                ),
-                trailing: const Icon(Icons.link_off, color: Color(0xFFBE123C)),
-                onTap: () => Navigator.pop(ctx, r),
-              ),
-          ],
-        ),
-      ),
-    );
-    if (picked == null || !mounted) return;
-    final relId = (picked['id'] ?? '').toString();
-    if (relId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('This link has no id and cannot be removed')),
-      );
-      return;
-    }
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Remove relationship?'),
-        content: const Text(
-          'This removes both directions of the link from the family graph.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFBE123C),
-            ),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Remove'),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true || !mounted) return;
-    try {
-      await context
-          .read<FamilyApiService>()
-          .deleteFamilyRelationship(familyId, relId);
-      await _load();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
@@ -416,8 +470,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
       }
       final rels = [...current.relationships];
       final seen = {
-        for (final r in rels)
-          '${r['source']}_${r['target']}_${r['type']}',
+        for (final r in rels) '${r['source']}_${r['target']}_${r['type']}',
       };
       for (final r in extra.relationships) {
         final key = '${r['source']}_${r['target']}_${r['type']}';
@@ -436,6 +489,38 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     }
   }
 
+  Future<void> _download() async {
+    if (_viewMode != 'diagram') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Switch to Diagram to download the tree')),
+      );
+      return;
+    }
+    final name =
+        context.read<FamilySessionProvider>().current?.name ?? 'family-tree';
+    setState(() => _downloading = true);
+    try {
+      await _graphKey.currentState?.exportPng(name);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => _downloading = false);
+    }
+  }
+
+  void _addPreviousGeneration() {
+    if (_ancestorDepth >= _maxAncestorDepth) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Maximum $_maxAncestorDepth ancestor generations'),
+        ),
+      );
+      return;
+    }
+    setState(() => _ancestorDepth += 1);
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = context.watch<FamilySessionProvider>();
@@ -445,12 +530,26 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
         : _canAddOnTree
             ? 'Tap green + on a person to add their relative.'
             : 'Switch to My circle to add people near you.';
+    final members = _tree?.members ?? const <FamilyMember>[];
 
     return Stack(
       children: [
         FtPage(
           title: 'Family Tree',
           actions: [
+            if (!_loading && _error == null) ...[
+              IconButton(
+                tooltip: 'Download',
+                onPressed: _downloading || members.isEmpty ? null : _download,
+                icon: _downloading
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.download_outlined),
+              ),
+            ],
             IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
           ],
           body: _loading
@@ -479,7 +578,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                   child: ListView.separated(
                                     scrollDirection: Axis.horizontal,
                                     itemCount: session.families.length,
-                                    separatorBuilder: (_, __) =>
+                                    separatorBuilder: (_, _) =>
                                         const SizedBox(width: 8),
                                     itemBuilder: (_, i) {
                                       final f = session.families[i];
@@ -488,63 +587,373 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                         selected: session.current?.id == f.id,
                                         onSelected: (_) {
                                           session.selectFamily(f);
+                                          _focusOverrideId = null;
                                           _load();
                                         },
                                       );
                                     },
                                   ),
                                 ),
-                              const SizedBox(height: 6),
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.tabTrack,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  children: [
-                                    _ScopeTab(
-                                      label: 'Complete tree',
-                                      selected: _scope == 'full',
-                                      onTap: () {
-                                        if (_scope == 'full') return;
-                                        setState(() => _scope = 'full');
-                                        _load();
-                                      },
+                              if (!_viewingSelf) ...[
+                                const SizedBox(height: 6),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE0F2FE),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: const Color(0xFFBAE6FD),
                                     ),
-                                    _ScopeTab(
-                                      label: 'My circle',
-                                      selected: _scope == 'near',
-                                      onTap: () {
-                                        if (_scope == 'near') return;
-                                        setState(() => _scope = 'near');
-                                        _load();
-                                      },
+                                  ),
+                                  child: Text(
+                                    'Viewing as ${_focusMemberName()} · ${members.length} members',
+                                    style: AppTheme.body(
+                                      size: 11,
+                                      weight: FontWeight.w700,
+                                      color: const Color(0xFF075985),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 8),
+                              _ToolbarCard(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      crossAxisAlignment:
+                                          WrapCrossAlignment.center,
+                                      children: [
+                                        if (_isAdmin) ...[
+                                          const Text(
+                                            'VIEW AS',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w800,
+                                              color: Color(0xFF047857),
+                                            ),
+                                          ),
+                                          SizedBox(
+                                            width: 170,
+                                            child: Builder(
+                                              builder: (context) {
+                                                final values = <String>{
+                                                  for (final m in members)
+                                                    m.userId ?? m.id,
+                                                };
+                                                final current = values.contains(
+                                                  _focusId,
+                                                )
+                                                    ? _focusId
+                                                    : (values.isEmpty
+                                                        ? null
+                                                        : values.first);
+                                                return DropdownButtonFormField<
+                                                    String>(
+                                                  value: current,
+                                                  isExpanded: true,
+                                                  decoration:
+                                                      const InputDecoration(
+                                                    isDense: true,
+                                                    contentPadding:
+                                                        EdgeInsets.symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 8,
+                                                    ),
+                                                  ),
+                                                  items: [
+                                                    for (final m in members)
+                                                      DropdownMenuItem(
+                                                        value:
+                                                            m.userId ?? m.id,
+                                                        child: Text(
+                                                          '${m.name}${_isMyMember(m) ? ' (You)' : ''}',
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
+                                                        ),
+                                                      ),
+                                                  ],
+                                                  onChanged: (v) {
+                                                    if (v == null) return;
+                                                    setState(() {
+                                                      _focusOverrideId = v;
+                                                      _selected = null;
+                                                      _generationFilter = 'all';
+                                                    });
+                                                  },
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                          if (!_viewingSelf)
+                                            OutlinedButton.icon(
+                                              onPressed: () => setState(() {
+                                                _focusOverrideId = _myFocusId;
+                                                _selected = null;
+                                                _generationFilter = 'all';
+                                              }),
+                                              icon: const Icon(
+                                                Icons.restart_alt,
+                                                size: 16,
+                                              ),
+                                              label: const Text('My tree'),
+                                            ),
+                                        ],
+                                        _ModeToggle(
+                                          left: 'Diagram',
+                                          right: 'List',
+                                          leftSelected: _viewMode == 'diagram',
+                                          onLeft: () => setState(
+                                            () => _viewMode = 'diagram',
+                                          ),
+                                          onRight: () => setState(
+                                            () => _viewMode = 'generations',
+                                          ),
+                                        ),
+                                        _ModeToggle(
+                                          left: 'Complete tree',
+                                          right: 'My circle',
+                                          leftSelected: _scope == 'full',
+                                          filled: true,
+                                          onLeft: () {
+                                            if (_scope == 'full') return;
+                                            setState(() => _scope = 'full');
+                                            _load();
+                                          },
+                                          onRight: () {
+                                            if (_scope == 'near') return;
+                                            setState(() => _scope = 'near');
+                                            _load();
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Stack(
+                                      children: [
+                                        TextField(
+                                          controller: _search,
+                                          onChanged: (_) => setState(() {
+                                            _searchOpen = true;
+                                          }),
+                                          onTap: () =>
+                                              setState(() => _searchOpen = true),
+                                          decoration: InputDecoration(
+                                            hintText: 'Search name or mobile…',
+                                            isDense: true,
+                                            prefixIcon: const Icon(
+                                              Icons.search,
+                                              size: 18,
+                                            ),
+                                            suffixIcon: _search.text.isEmpty
+                                                ? null
+                                                : IconButton(
+                                                    icon: const Icon(
+                                                      Icons.close,
+                                                      size: 16,
+                                                    ),
+                                                    onPressed: () => setState(() {
+                                                      _search.clear();
+                                                      _searchOpen = false;
+                                                    }),
+                                                  ),
+                                          ),
+                                          onSubmitted: (_) {
+                                            final first = _searchMatches;
+                                            if (first.isNotEmpty) {
+                                              _jumpToMember(first.first);
+                                            }
+                                          },
+                                        ),
+                                        if (_searchOpen &&
+                                            _search.text.trim().isNotEmpty)
+                                          Positioned(
+                                            left: 0,
+                                            right: 0,
+                                            top: 44,
+                                            child: Material(
+                                              elevation: 6,
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              color: Colors.white,
+                                              child: ConstrainedBox(
+                                                constraints: const BoxConstraints(
+                                                  maxHeight: 220,
+                                                ),
+                                                child: _searchMatches.isEmpty
+                                                    ? const Padding(
+                                                        padding: EdgeInsets.all(
+                                                          12,
+                                                        ),
+                                                        child: Text(
+                                                          'No member found',
+                                                          style: TextStyle(
+                                                            fontSize: 12,
+                                                            color: Color(
+                                                              0xFF94A3B8,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      )
+                                                    : ListView.builder(
+                                                        shrinkWrap: true,
+                                                        itemCount:
+                                                            _searchMatches.length,
+                                                        itemBuilder: (_, i) {
+                                                          final m =
+                                                              _searchMatches[i];
+                                                          final phone =
+                                                              (m.phone ?? '')
+                                                                  .replaceAll(
+                                                            RegExp(r'\D'),
+                                                            '',
+                                                          );
+                                                          return ListTile(
+                                                            dense: true,
+                                                            title: Text(m.name),
+                                                            subtitle: Text(
+                                                              [
+                                                                m.relationship,
+                                                                if (phone
+                                                                    .isNotEmpty)
+                                                                  '+91 $phone',
+                                                              ]
+                                                                  .whereType<
+                                                                      String>()
+                                                                  .where(
+                                                                    (e) => e
+                                                                        .isNotEmpty,
+                                                                  )
+                                                                  .join(' · '),
+                                                            ),
+                                                            onTap: () =>
+                                                                _jumpToMember(m),
+                                                          );
+                                                        },
+                                                      ),
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    if (_viewMode == 'generations') ...[
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: DropdownButtonFormField<String>(
+                                              value: _generationFilter,
+                                              decoration: const InputDecoration(
+                                                isDense: true,
+                                                contentPadding:
+                                                    EdgeInsets.symmetric(
+                                                  horizontal: 10,
+                                                  vertical: 8,
+                                                ),
+                                              ),
+                                              items: [
+                                                const DropdownMenuItem(
+                                                  value: 'all',
+                                                  child: Text('All generations'),
+                                                ),
+                                                for (final layer
+                                                    in _generationData.layers)
+                                                  DropdownMenuItem(
+                                                    value: layer.level.toString(),
+                                                    child: Text(
+                                                      layer.title.replaceFirst(
+                                                        RegExp(r'^Generation\s+',
+                                                            caseSensitive:
+                                                                false),
+                                                        'Gen ',
+                                                      ),
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                              ],
+                                              onChanged: (v) {
+                                                if (v == null) return;
+                                                setState(
+                                                  () => _generationFilter = v,
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          OutlinedButton.icon(
+                                            onPressed: _ancestorDepth >=
+                                                    _maxAncestorDepth
+                                                ? null
+                                                : _addPreviousGeneration,
+                                            icon: const Icon(Icons.add, size: 16),
+                                            label: Text(
+                                              'Add gen $_ancestorDepth/$_maxAncestorDepth',
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      SizedBox(
+                                        height: 32,
+                                        child: ListView(
+                                          scrollDirection: Axis.horizontal,
+                                          children: [
+                                            _GenChip(
+                                              label: 'All',
+                                              selected:
+                                                  _generationFilter == 'all',
+                                              onTap: () => setState(
+                                                () => _generationFilter = 'all',
+                                              ),
+                                            ),
+                                            for (final layer
+                                                in _generationData.layers)
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                  left: 6,
+                                                ),
+                                                child: _GenChip(
+                                                  label:
+                                                      '${layer.title.replaceFirst(RegExp(r'^Generation\s+', caseSensitive: false), 'Gen ')} ${layer.members.length}',
+                                                  selected: _generationFilter ==
+                                                      layer.level.toString(),
+                                                  onTap: () => setState(() {
+                                                    final key =
+                                                        layer.level.toString();
+                                                    _generationFilter =
+                                                        _generationFilter == key
+                                                            ? 'all'
+                                                            : key;
+                                                  }),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      hint,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTheme.body(
+                                        size: 11,
+                                        color: AppTheme.muted,
+                                      ),
                                     ),
                                   ],
                                 ),
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                hint,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppTheme.body(
-                                  size: 11,
-                                  color: AppTheme.muted,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Pinch to zoom · drag to pan · Fit to see full tree',
-                                style: AppTheme.body(
-                                  size: 10,
-                                  color: AppTheme.muted.withValues(alpha: 0.85),
-                                ),
-                              ),
                               if (_canAddOnTree &&
-                                  _unplacedMembers.isNotEmpty) ...[
+                                  _unplacedMembers.isNotEmpty &&
+                                  _viewMode == 'diagram') ...[
                                 const SizedBox(height: 8),
                                 Text(
                                   'Place on tree',
@@ -559,7 +968,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                   child: ListView.separated(
                                     scrollDirection: Axis.horizontal,
                                     itemCount: _unplacedMembers.length,
-                                    separatorBuilder: (_, __) =>
+                                    separatorBuilder: (_, _) =>
                                         const SizedBox(width: 8),
                                     itemBuilder: (_, i) {
                                       final m = _unplacedMembers[i];
@@ -585,149 +994,85 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                           ),
                         ),
                         Expanded(
-                          child: Stack(
-                            children: [
-                              FamilyGraphView(
-                                members: _placedMembers,
-                                relationships:
-                                    _tree?.relationships ?? const [],
-                                focusUserId: _myFocusId,
-                                meUserId: auth.user?.id,
-                                canAdd: _canAddOnTree,
-                                showExpand: _scope == 'near',
-                                onMemberTap: (m) =>
-                                    setState(() => _selected = m),
-                                onAdd: _canAddOnTree ? _openAdd : null,
-                                onLink: _canAddOnTree ? _openLink : null,
-                                onExpand:
-                                    _scope == 'near' ? _expand : null,
-                              ),
-                              if (_selected != null)
-                                Positioned(
-                                  left: 12,
-                                  right: 12,
-                                  bottom: 12,
-                                  child: Material(
-                                    elevation: 8,
-                                    borderRadius: BorderRadius.circular(16),
-                                    color: AppTheme.card,
-                                    child: ListTile(
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(16),
-                                      ),
-                                      leading: CircleAvatar(
-                                        backgroundColor: AppTheme.forest
-                                            .withValues(alpha: 0.12),
-                                        child: Text(
-                                          _selected!.name.isNotEmpty
-                                              ? _selected!.name[0]
-                                                  .toUpperCase()
-                                              : '?',
+                          child: _viewMode == 'generations'
+                              ? _GenerationsList(
+                                  layers: _visibleGenerationLayers,
+                                  selectedId: _selected?.id,
+                                  meUserId: auth.user?.id,
+                                  onSelect: (map) {
+                                    final id = (map['id'] ?? '').toString();
+                                    final userId =
+                                        (map['userId'] ?? map['user_id'] ?? '')
+                                            .toString();
+                                    FamilyMember? member;
+                                    for (final m in members) {
+                                      if (m.id == id ||
+                                          (userId.isNotEmpty &&
+                                              m.userId == userId)) {
+                                        member = m;
+                                        break;
+                                      }
+                                    }
+                                    member ??= FamilyMember.fromJson(map);
+                                    _openMemberProfile(member);
+                                  },
+                                )
+                              : Stack(
+                                  children: [
+                                    FamilyGraphView(
+                                      key: _graphKey,
+                                      members: _placedMembers,
+                                      relationships:
+                                          _tree?.relationships ?? const [],
+                                      focusUserId: _focusId,
+                                      meUserId: auth.user?.id,
+                                      selectedId: _selected?.id,
+                                      canAdd: _canAddOnTree,
+                                      showExpand: _scope == 'near',
+                                      onMemberTap: _openMemberProfile,
+                                      onAdd: _canAddOnTree ? _openAdd : null,
+                                      onLink: _canAddOnTree ? _openLink : null,
+                                      onExpand:
+                                          _scope == 'near' ? _expand : null,
+                                      onMakeAdmin:
+                                          _isAdmin ? _toggleAdmin : null,
+                                    ),
+                                    if (_selected != null)
+                                      Positioned(
+                                        left: 12,
+                                        right: 12,
+                                        bottom: 12,
+                                        child: _SelectedMemberCard(
+                                          member: _selected!,
+                                          meUserId: auth.user?.id,
+                                          isAdmin: _isAdmin,
+                                          canAdd: _canAddOnTree,
+                                          onClose: () =>
+                                              setState(() => _selected = null),
+                                          onChat: () {
+                                            setState(() {
+                                              _chatPeerUserId =
+                                                  _selected!.userId;
+                                              _chatDockNonce++;
+                                              _selected = null;
+                                            });
+                                          },
+                                          onAdd: () => _openAdd(_selected!),
+                                          onAdmin: () =>
+                                              _toggleAdmin(_selected!),
+                                          onShowTree: () =>
+                                              _showTheirTree(_selected!),
+                                          onOpenProfile: () =>
+                                              _openMemberProfile(_selected!),
                                         ),
                                       ),
-                                      title: Text(
-                                        _selected!.name,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      subtitle: Text(
-                                        [
-                                          if (_selected!.relationship != null)
-                                            _selected!.relationship!,
-                                          if (_selected!.isOwner)
-                                            'Owner'
-                                          else if (_selected!.isAdmin)
-                                            'Admin',
-                                          if (_selected!.invitePending)
-                                            'Pending',
-                                        ].join(' · '),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      trailing: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          if ((_selected!.userId ?? '')
-                                                  .isNotEmpty &&
-                                              _selected!.userId !=
-                                                  auth.user?.id &&
-                                              _selected!.isAlive)
-                                            IconButton(
-                                              tooltip: 'Chat',
-                                              onPressed: () {
-                                                setState(() {
-                                                  _chatPeerUserId =
-                                                      _selected!.userId;
-                                                  _chatDockNonce++;
-                                                  _selected = null;
-                                                });
-                                              },
-                                              icon: Icon(
-                                                Icons.chat_bubble,
-                                                color: AppTheme.accentPink,
-                                              ),
-                                            ),
-                                          if (_isAdmin &&
-                                              !_selected!.isOwner &&
-                                              _selected!.hasLoginAccount &&
-                                              _selected!.isAlive)
-                                            IconButton(
-                                              tooltip: _selected!.isAdmin
-                                                  ? 'Remove admin'
-                                                  : 'Make admin',
-                                              onPressed: () =>
-                                                  _toggleAdmin(_selected!),
-                                              icon: Icon(
-                                                _selected!.isAdmin
-                                                    ? Icons.shield_outlined
-                                                    : Icons
-                                                        .admin_panel_settings_outlined,
-                                                color: const Color(0xFF0369A1),
-                                              ),
-                                            ),
-                                          if (_isAdmin)
-                                            IconButton(
-                                              tooltip: 'Remove relationship',
-                                              onPressed: () =>
-                                                  _manageRelationships(
-                                                _selected!,
-                                              ),
-                                              icon: const Icon(
-                                                Icons.link_off,
-                                                color: Color(0xFFBE123C),
-                                              ),
-                                            ),
-                                          if (_canAddOnTree)
-                                            IconButton(
-                                              tooltip: 'Add relative',
-                                              onPressed: () =>
-                                                  _openAdd(_selected!),
-                                              icon: const Icon(
-                                                Icons.add_circle,
-                                                color: Color(0xFF059669),
-                                              ),
-                                            ),
-                                          IconButton(
-                                            icon: const Icon(Icons.close),
-                                            onPressed: () => setState(
-                                              () => _selected = null,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+                                  ],
                                 ),
-                            ],
-                          ),
                         ),
                       ],
                     ),
         ),
-        if (!_loading &&
-            _error == null &&
-            session.familyId != null)
+        if (!_loading && _error == null && session.familyId != null)
           FamilyChatDock(
             key: ValueKey('chat-dock-$_chatDockNonce-${session.familyId}'),
             familyId: session.familyId!,
@@ -749,10 +1094,137 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
       ],
     );
   }
+
+  bool _isMyMember(FamilyMember m) {
+    final mine = _myFocusId;
+    if (mine == null) return false;
+    return m.userId == mine || m.id == mine;
+  }
+
+  String _focusMemberName() {
+    final focus = _focusId;
+    if (focus == null) return 'member';
+    for (final m in _tree?.members ?? const <FamilyMember>[]) {
+      if (m.userId == focus || m.id == focus) return m.name;
+    }
+    return 'member';
+  }
 }
 
-class _ScopeTab extends StatelessWidget {
-  const _ScopeTab({
+MemberMap _memberToMap(FamilyMember m) => {
+      'id': m.id,
+      'userId': m.userId,
+      'user_id': m.userId,
+      'name': m.name,
+      'relationship': m.relationship,
+      'status': m.status,
+      'email': m.email,
+      'phone': m.phone,
+      'avatar': m.avatar,
+      'gender': m.gender,
+      'location': m.location,
+      'isAdmin': m.isAdmin,
+      'isOwner': m.isOwner,
+      'invitePending': m.invitePending,
+      'profileInfo': m.profileInfo,
+      'profile_info': m.profileInfo,
+    };
+
+int mathMax(int a, int b) => a > b ? a : b;
+
+class _ToolbarCard extends StatelessWidget {
+  const _ToolbarCard({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _ModeToggle extends StatelessWidget {
+  const _ModeToggle({
+    required this.left,
+    required this.right,
+    required this.leftSelected,
+    required this.onLeft,
+    required this.onRight,
+    this.filled = false,
+  });
+
+  final String left;
+  final String right;
+  final bool leftSelected;
+  final VoidCallback onLeft;
+  final VoidCallback onRight;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _pill(left, leftSelected, onLeft),
+          _pill(right, !leftSelected, onRight),
+        ],
+      ),
+    );
+  }
+
+  Widget _pill(String label, bool selected, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected
+              ? (filled ? AppTheme.forest : Colors.white)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: selected && !filled
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 4,
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: selected
+                ? (filled ? Colors.black : AppTheme.forest)
+                : AppTheme.muted,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GenChip extends StatelessWidget {
+  const _GenChip({
     required this.label,
     required this.selected,
     required this.onTap,
@@ -764,26 +1236,266 @@ class _ScopeTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          height: 34,
-          alignment: Alignment.center,
+    return ChoiceChip(
+      label: Text(label, style: const TextStyle(fontSize: 11)),
+      selected: selected,
+      onSelected: (_) => onTap(),
+      visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
+class _GenerationsList extends StatelessWidget {
+  const _GenerationsList({
+    required this.layers,
+    required this.onSelect,
+    this.selectedId,
+    this.meUserId,
+  });
+
+  final List<GenerationLayer> layers;
+  final ValueChanged<MemberMap> onSelect;
+  final String? selectedId;
+  final String? meUserId;
+
+  @override
+  Widget build(BuildContext context) {
+    if (layers.isEmpty) {
+      return const Center(child: Text('No generation data yet'));
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 100),
+      itemCount: layers.length,
+      itemBuilder: (_, i) {
+        final layer = layers[i];
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
           decoration: BoxDecoration(
-            color: selected ? AppTheme.forest : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
           ),
-          child: Text(
-            label,
-            style: AppTheme.body(
-              size: 12,
-              weight: FontWeight.w700,
-              color: selected ? Colors.white : AppTheme.muted,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            layer.title.replaceFirst(
+                              RegExp(r'^Generation\s+', caseSensitive: false),
+                              'Gen ',
+                            ),
+                            style: AppTheme.body(weight: FontWeight.w800),
+                          ),
+                          if (layer.subtitle.isNotEmpty)
+                            Text(
+                              layer.subtitle,
+                              style: AppTheme.body(
+                                size: 11,
+                                color: AppTheme.muted,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    CircleAvatar(
+                      radius: 12,
+                      backgroundColor: const Color(0xFFF1F5F9),
+                      child: Text(
+                        '${layer.members.length}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              if (layer.members.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Text(
+                    'No members yet',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                  ),
+                )
+              else
+                ...layer.members.map((m) {
+                  final id = (m['id'] ?? '').toString();
+                  final userId = (m['userId'] ?? m['user_id'] ?? '').toString();
+                  final selected = selectedId == id;
+                  final isMe = meUserId != null &&
+                      (userId == meUserId || id == meUserId);
+                  final url = mediaUrl((m['avatar'] ?? '').toString());
+                  return ListTile(
+                    selected: selected,
+                    selectedTileColor: const Color(0xFFECFDF5),
+                    leading: CircleAvatar(
+                      backgroundColor: AppTheme.forest.withValues(alpha: 0.12),
+                      backgroundImage: url != null ? NetworkImage(url) : null,
+                      child: url == null
+                          ? Text(
+                              ((m['name'] ?? '?').toString().isNotEmpty
+                                      ? (m['name'] as String)[0]
+                                      : '?')
+                                  .toUpperCase(),
+                            )
+                          : null,
+                    ),
+                    title: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            (m['name'] ?? 'Member').toString(),
+                            style: AppTheme.body(weight: FontWeight.w800),
+                          ),
+                        ),
+                        if (isMe)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFBBF24),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: const Text(
+                              'YOU',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    subtitle: Text(
+                      [
+                        (m['generationRole'] ?? m['relationship'] ?? '')
+                            .toString(),
+                        (m['location'] ?? '').toString(),
+                      ].where((e) => e.trim().isNotEmpty).join(' · '),
+                    ),
+                    onTap: () => onSelect(m),
+                  );
+                }),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SelectedMemberCard extends StatelessWidget {
+  const _SelectedMemberCard({
+    required this.member,
+    required this.isAdmin,
+    required this.canAdd,
+    required this.onClose,
+    required this.onChat,
+    required this.onAdd,
+    required this.onAdmin,
+    required this.onShowTree,
+    required this.onOpenProfile,
+    this.meUserId,
+  });
+
+  final FamilyMember member;
+  final String? meUserId;
+  final bool isAdmin;
+  final bool canAdd;
+  final VoidCallback onClose;
+  final VoidCallback onChat;
+  final VoidCallback onAdd;
+  final VoidCallback onAdmin;
+  final VoidCallback onShowTree;
+  final VoidCallback onOpenProfile;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      elevation: 8,
+      borderRadius: BorderRadius.circular(16),
+      color: AppTheme.card,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 4, 4, 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: ListTile(
+                contentPadding: const EdgeInsets.only(left: 8),
+                onTap: onOpenProfile,
+                leading: CircleAvatar(
+                  backgroundColor: AppTheme.forest.withValues(alpha: 0.12),
+                  child: Text(
+                    member.name.isNotEmpty ? member.name[0].toUpperCase() : '?',
+                  ),
+                ),
+                title: Text(
+                  member.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: Text(
+                  [
+                    if (member.relationship != null) member.relationship!,
+                    if (member.isOwner)
+                      'Owner'
+                    else if (member.isAdmin)
+                      'Admin',
+                  ].join(' · '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ),
-          ),
+            if ((member.userId ?? '').isNotEmpty &&
+                member.userId != meUserId &&
+                member.isAlive)
+              IconButton(
+                tooltip: 'Chat',
+                onPressed: onChat,
+                icon: Icon(Icons.chat_bubble, color: AppTheme.accentPink),
+              ),
+            if (isAdmin && member.hasLoginAccount)
+              IconButton(
+                tooltip: 'Show their tree',
+                onPressed: onShowTree,
+                icon: const Icon(Icons.visibility_outlined),
+              ),
+            if (isAdmin &&
+                !member.isOwner &&
+                member.hasLoginAccount &&
+                member.isAlive)
+              IconButton(
+                tooltip: member.isAdmin ? 'Remove admin' : 'Make admin',
+                onPressed: onAdmin,
+                icon: Icon(
+                  member.isAdmin
+                      ? Icons.shield_outlined
+                      : Icons.admin_panel_settings_outlined,
+                  color: const Color(0xFF0369A1),
+                ),
+              ),
+            if (canAdd)
+              IconButton(
+                tooltip: 'Add relative',
+                onPressed: onAdd,
+                icon: const Icon(Icons.add_circle, color: Color(0xFF059669)),
+              ),
+            IconButton(icon: const Icon(Icons.close), onPressed: onClose),
+          ],
         ),
       ),
     );

@@ -392,7 +392,11 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
                   Row(
                     children: [
                       ChoiceChip(
-                        label: const Text('Living'),
+                        label: const Text(
+                          'Living',
+                          style: TextStyle(color: Colors.black),
+                        ),
+                        labelStyle: const TextStyle(color: Colors.black),
                         selected: isAlive,
                         onSelected: (_) => setLocal(() {
                           isAlive = true;
@@ -400,7 +404,11 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
                       ),
                       const SizedBox(width: 8),
                       ChoiceChip(
-                        label: const Text('Memorial'),
+                        label: const Text(
+                          'Memorial',
+                          style: TextStyle(color: Colors.black),
+                        ),
+                        labelStyle: const TextStyle(color: Colors.black),
                         selected: !isAlive,
                         onSelected: (_) => setLocal(() {
                           isAlive = false;
@@ -628,7 +636,7 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
           ? FloatingActionButton.extended(
               onPressed: _addMember,
               backgroundColor: AppTheme.forest,
-              foregroundColor: Colors.white,
+              foregroundColor: Colors.black,
               icon: const Icon(Icons.person_add),
               label: const Text('Add'),
             )
@@ -715,7 +723,7 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
                                   height: 16,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    color: Colors.white,
+                                    color: Colors.black,
                                   ),
                                 )
                               : const Text('Search'),
