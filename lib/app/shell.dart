@@ -230,8 +230,18 @@ class _AppDrawer extends StatelessWidget {
           ),
         ),
         onTap: () {
-          if (!permanent) Navigator.pop(context);
-          context.openShell(path);
+          // Capture router before closing the drawer — using drawer context
+          // after pop can leave navigation stuck on the previous tab.
+          final router = GoRouter.of(context);
+          final goPath = path;
+          if (!permanent) {
+            Navigator.of(context).pop();
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              router.go(goPath);
+            });
+            return;
+          }
+          router.go(goPath);
         },
       ),
     );

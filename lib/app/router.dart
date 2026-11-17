@@ -128,16 +128,17 @@ extension AuthRouterX on BuildContext {
   AuthProvider get auth => read<AuthProvider>();
 }
 
-/// In-app navigation that keeps a back stack (phone back → previous screen).
+/// Sidebar / shell tab navigation.
+/// Always [go] (replace) so tabs don't stack and Dashboard never gets stuck.
 extension ShellNavX on BuildContext {
   void openShell(String path) {
+    final router = GoRouter.of(this);
     final loc = GoRouterState.of(this).matchedLocation;
-    if (loc == path) return;
-    // Dashboard is the root — clear stack so back from home can exit.
-    if (path == '/dashboard') {
-      go('/dashboard');
+    if (loc == path) {
+      // Already on this tab — still replace so the screen rebuilds/refocuses.
+      router.go(path);
       return;
     }
-    push(path);
+    router.go(path);
   }
 }
