@@ -117,12 +117,30 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
   late FamilyMember _relatedTo;
   String _dob = '';
   bool _isAlive = true;
+  bool _withMobile = true;
   String? _existingMemberId;
   String? _photoPath;
   String? _phoneHint;
   bool _phoneBlocked = false;
   bool _submitting = false;
   String? _error;
+
+  int? get _age {
+    final dt = DateTime.tryParse(_dob);
+    if (dt == null) return null;
+    final now = DateTime.now();
+    var age = now.year - dt.year;
+    if (now.month < dt.month ||
+        (now.month == dt.month && now.day < dt.day)) {
+      age -= 1;
+    }
+    return age;
+  }
+
+  bool get _isMinor {
+    final age = _age;
+    return age != null && age < 18;
+  }
 
   @override
   void initState() {
@@ -246,6 +264,42 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
           'relatedMemberId': anchorId,
           'relationshipType': _relationship,
         });
+      } else if (_isAlive && _isMinor && !_withMobile) {
+        if (_name.text.trim().isEmpty) {
+          setState(() {
+            _error = 'Enter the name.';
+            _submitting = false;
+          });
+          return;
+        }
+        if (_dob.isEmpty) {
+          setState(() {
+            _error = 'Date of birth is required for under-18 without mobile.';
+            _submitting = false;
+          });
+          return;
+        }
+        final avatar = await _uploadAvatar();
+        await api.addFamilyMemberWithOtp(widget.familyId, {
+          'name': _name.text.trim(),
+          'relationship': _relationship,
+          'isAlive': true,
+          'withoutMobile': true,
+          'dateOfBirth': _dob,
+          'profileInfo': {
+            'notes': _notes.text.trim().isEmpty ? null : _notes.text.trim(),
+            if (_gender.isNotEmpty) 'gender': _gender,
+            'dateOfBirth': _dob,
+            if (avatar != null) 'avatar': avatar,
+            if (avatar != null) 'profileImage': avatar,
+            'relatedTo': anchorId,
+            'linkType': linkTypeFromRelationship(_relationship),
+            if (widget.focusUserId != null)
+              'addedFromFocusUserId': widget.focusUserId,
+            'withoutMobile': true,
+            'requireLogin': false,
+          }..removeWhere((_, v) => v == null),
+        });
       } else {
         final phone = _phone.text.trim();
         if (!RegExp(r'^[6-9]\d{9}$').hasMatch(phone)) {
@@ -274,6 +328,7 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
           if (_email.text.trim().isNotEmpty)
             'email': _email.text.trim().toLowerCase(),
           'relationship': _relationship,
+          if (_dob.isNotEmpty) 'dateOfBirth': _dob,
           'profileInfo': {
             'phone': phone,
             if (_notes.text.trim().isNotEmpty) 'notes': _notes.text.trim(),
@@ -427,6 +482,7 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
                               setState(() {
                                 _dob =
                                     '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                                if (!_isMinor) _withMobile = true;
                               });
                             }
                           },
@@ -457,12 +513,30 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
                             onSelected: (_) => setState(() {
                               _isAlive = false;
                               _existingMemberId = null;
+                              _withMobile = true;
                               _phone.clear();
                               _email.clear();
                             }),
                           ),
                         ],
                       ),
+                      if (_isAlive && _isMinor) ...[
+                        const SizedBox(height: 8),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          dense: true,
+                          title: const Text(
+                            'Give mobile login',
+                            style: TextStyle(fontSize: 13),
+                          ),
+                          subtitle: const Text(
+                            'Off = under-18 with no account',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                          value: _withMobile,
+                          onChanged: (v) => setState(() => _withMobile = v),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -543,33 +617,35 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
                         }),
                       ),
                     ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _phone,
-                keyboardType: TextInputType.phone,
-                maxLength: 10,
-                decoration: InputDecoration(
-                  labelText: 'Mobile (+91)',
-                  counterText: '',
-                  errorText: _phoneHint?.isEmpty == true ? null : _phoneHint,
+              if (!_isMinor || _withMobile || _existingMemberId != null) ...[
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _phone,
+                  keyboardType: TextInputType.phone,
+                  maxLength: 10,
+                  decoration: InputDecoration(
+                    labelText: 'Mobile (+91)',
+                    counterText: '',
+                    errorText: _phoneHint?.isEmpty == true ? null : _phoneHint,
+                  ),
+                  onChanged: (_) {
+                    if (_phoneBlocked || _phoneHint != null) {
+                      setState(() {
+                        _phoneBlocked = false;
+                        _phoneHint = null;
+                      });
+                    }
+                  },
+                  onEditingComplete: _checkPhone,
                 ),
-                onChanged: (_) {
-                  if (_phoneBlocked || _phoneHint != null) {
-                    setState(() {
-                      _phoneBlocked = false;
-                      _phoneHint = null;
-                    });
-                  }
-                },
-                onEditingComplete: _checkPhone,
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _email,
-                decoration: const InputDecoration(
-                  labelText: 'Email (optional)',
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _email,
+                  decoration: const InputDecoration(
+                    labelText: 'Email (optional)',
+                  ),
                 ),
-              ),
+              ],
               const SizedBox(height: 8),
               TextField(
                 controller: _notes,
@@ -595,7 +671,13 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
                           color: Colors.white,
                         ),
                       )
-                    : Text(_isAlive ? 'Save & send invite' : 'Save memorial'),
+                    : Text(
+                        !_isAlive
+                            ? 'Save memorial'
+                            : (_isMinor && !_withMobile)
+                                ? 'Save without login'
+                                : 'Save & send invite',
+                      ),
               ),
             ),
           ],

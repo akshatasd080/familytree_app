@@ -9,13 +9,13 @@ const _parentTypes = {'father', 'mother'};
 const _childTypes = {'son', 'daughter'};
 const _spouseTypes = {'husband', 'wife', 'spouse'};
 
-const double nodeW = 256;
-const double nodeH = 100;
-const double spouseGap = 36;
-const double unitGap = 48;
-const double rowGap = 64;
-/// Left label column — tighter than web desktop (200) for phone fit.
-const double gutter = 118;
+const double nodeW = 248;
+const double nodeH = 108;
+const double spouseGap = 40;
+const double unitGap = 44;
+const double rowGap = 72;
+/// Left label column — tight for phone so cards sit more centered.
+const double gutter = 96;
 const double stride = nodeH + rowGap;
 
 const _bandColors = [

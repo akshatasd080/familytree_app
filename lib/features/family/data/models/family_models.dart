@@ -45,6 +45,9 @@ class FamilyMember {
     this.emailStatus,
     this.joinedAt,
     this.isAlive = true,
+    this.isAdmin = false,
+    this.isOwner = false,
+    this.invitePending = false,
     this.profileInfo = const {},
   });
 
@@ -61,16 +64,56 @@ class FamilyMember {
   final String? emailStatus;
   final String? joinedAt;
   final bool isAlive;
+  final bool isAdmin;
+  final bool isOwner;
+  final bool invitePending;
   final Map<String, dynamic> profileInfo;
 
   bool get isSiteCreator =>
-      (relationship ?? '').toLowerCase().replaceAll(' ', '') == 'sitecreator';
+      isOwner ||
+      (relationship ?? '').toLowerCase().replaceAll(RegExp(r'[\s_-]+'), '') ==
+          'sitecreator';
+
+  bool get isMembershipActive {
+    final s = (status ?? 'ACTIVE').toUpperCase();
+    return s != 'INACTIVE';
+  }
+
+  bool get hasLoginAccount => (userId ?? '').trim().isNotEmpty;
 
   String get displayEmail {
     final e = (email ?? '').trim();
     if (e.isEmpty || e.endsWith('@phone.familytree.local')) return '';
     return e;
   }
+
+  FamilyMember copyWith({
+    bool? isAdmin,
+    bool? isOwner,
+    bool? isAlive,
+    String? status,
+    bool? invitePending,
+    Map<String, dynamic>? profileInfo,
+  }) =>
+      FamilyMember(
+        id: id,
+        name: name,
+        userId: userId,
+        relationship: relationship,
+        status: status ?? this.status,
+        email: email,
+        phone: phone,
+        avatar: avatar,
+        gender: gender,
+        location: location,
+        emailStatus: emailStatus,
+        joinedAt: joinedAt,
+        isAlive: isAlive ?? this.isAlive,
+        isAdmin: isAdmin ?? this.isAdmin,
+        isOwner: isOwner ?? this.isOwner,
+        invitePending: invitePending ?? this.invitePending,
+        profileInfo: profileInfo ?? this.profileInfo,
+      );
 
   factory FamilyMember.fromJson(Map<String, dynamic> json) {
     final user = json['user'] is Map
@@ -81,6 +124,20 @@ class FamilyMember {
         ? Map<String, dynamic>.from(profile)
         : <String, dynamic>{};
     final aliveRaw = json['is_alive'] ?? json['isAlive'] ?? profileMap['isAlive'];
+    final accessRole = (profileMap['accessRole'] ?? profileMap['role'] ?? '')
+        .toString()
+        .toLowerCase();
+    final ownerFlag = json['isOwner'] == true ||
+        json['is_owner'] == true ||
+        (json['relationship'] ?? '')
+                .toString()
+                .toLowerCase()
+                .replaceAll(RegExp(r'[\s_-]+'), '') ==
+            'sitecreator';
+    final adminFlag = json['isAdmin'] == true ||
+        json['is_admin'] == true ||
+        ownerFlag ||
+        accessRole == 'admin';
     return FamilyMember(
       id: (json['id'] ?? '').toString(),
       name: (json['name'] ??
@@ -112,6 +169,11 @@ class FamilyMember {
               json['created_at'])
           ?.toString(),
       isAlive: aliveRaw != false,
+      isAdmin: adminFlag,
+      isOwner: ownerFlag,
+      invitePending: json['invitePending'] == true ||
+          json['invite_pending'] == true ||
+          (json['emailStatus'] ?? '').toString().toUpperCase() == 'PENDING',
       profileInfo: profileMap,
     );
   }

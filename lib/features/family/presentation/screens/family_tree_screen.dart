@@ -67,6 +67,76 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     return _scope == 'near';
   }
 
+  /// Join-approved / loosely linked people not yet placed on the graph.
+  List<FamilyMember> get _unplacedMembers {
+    final people = _tree?.members ?? const <FamilyMember>[];
+    final relationships = _tree?.relationships ?? const <Map<String, dynamic>>[];
+    if (people.isEmpty) return const [];
+
+    final focus = (_myFocusId ?? '').toString();
+    FamilyMember? root;
+    for (final m in people) {
+      if ((m.userId ?? '') == focus || m.id == focus) {
+        root = m;
+        break;
+      }
+    }
+    if (root == null) {
+      for (final m in people) {
+        if (m.isSiteCreator) {
+          root = m;
+          break;
+        }
+      }
+    }
+    root ??= people.first;
+
+    final meaningfulTypes = <String>{};
+    final neighbors = <String, Set<String>>{};
+    void touch(String from, String to) {
+      neighbors.putIfAbsent(from, () => <String>{}).add(to);
+    }
+
+    for (final edge in relationships) {
+      final type =
+          (edge['type'] ?? edge['relationship_type'] ?? '').toString().toLowerCase();
+      final source = (edge['source'] ?? '').toString();
+      final target = (edge['target'] ?? '').toString();
+      if (source.isEmpty || target.isEmpty) continue;
+      if (type == 'other' || type == 'unknown') continue;
+      if (type.isNotEmpty) {
+        meaningfulTypes.add(source);
+        meaningfulTypes.add(target);
+      }
+      touch(source, target);
+      touch(target, source);
+    }
+
+    final seen = <String>{root.id};
+    final queue = <String>[root.id];
+    while (queue.isNotEmpty) {
+      final current = queue.removeLast();
+      for (final next in neighbors[current] ?? const <String>{}) {
+        if (seen.add(next)) queue.add(next);
+      }
+    }
+
+    return people.where((member) {
+      if (member.id == root!.id) return false;
+      if (member.isSiteCreator) return false;
+      if (!seen.contains(member.id)) return true;
+      if (!meaningfulTypes.contains(member.id)) return true;
+      return false;
+    }).toList();
+  }
+
+  List<FamilyMember> get _placedMembers {
+    final hidden = _unplacedMembers.map((m) => m.id).toSet();
+    return (_tree?.members ?? const <FamilyMember>[])
+        .where((m) => !hidden.contains(m.id))
+        .toList();
+  }
+
   Future<void> _load() async {
     final session = context.read<FamilySessionProvider>();
     final api = context.read<FamilyApiService>();
@@ -138,17 +208,185 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     if (ok) await _load();
   }
 
-  Future<void> _openLink(FamilyMember person) async {
+  Future<void> _openLink(FamilyMember person, {FamilyMember? target}) async {
     final familyId = context.read<FamilySessionProvider>().familyId;
     if (familyId == null || !_canAddOnTree) return;
     setState(() => _selected = null);
     final ok = await showSetRelationSheet(
       context: context,
       familyId: familyId,
-      members: _tree?.members ?? const [],
+      members: _placedMembers.isEmpty
+          ? (_tree?.members ?? const [])
+          : _placedMembers,
       member: person,
+      initialTarget: target,
     );
     if (ok) await _load();
+  }
+
+  Future<void> _toggleAdmin(FamilyMember person) async {
+    final familyId = context.read<FamilySessionProvider>().familyId;
+    if (!_isAdmin || familyId == null || person.isOwner || !person.hasLoginAccount) {
+      return;
+    }
+    final nextAdmin = !person.isAdmin;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          nextAdmin
+              ? 'Make ${person.name} an admin?'
+              : 'Remove admin from ${person.name}?',
+        ),
+        content: Text(
+          nextAdmin
+              ? 'They can manage members and family settings.'
+              : 'They will become a regular family member.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(nextAdmin ? 'Make admin' : 'Remove admin'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      final res = await context.read<FamilyApiService>().setFamilyMemberAdmin(
+            familyId,
+            person.id,
+            nextAdmin,
+          );
+      final updated = res.data is Map ? res.data['member'] : null;
+      final nextIsAdmin = updated is Map
+          ? updated['isAdmin'] == true
+          : nextAdmin;
+      setState(() {
+        final current = _tree;
+        if (current == null) return;
+        _tree = FamilyTreeData(
+          members: current.members
+              .map(
+                (m) => m.id == person.id
+                    ? m.copyWith(isAdmin: nextIsAdmin)
+                    : m,
+              )
+              .toList(),
+          relationships: current.relationships,
+          role: current.role,
+        );
+        if (_selected?.id == person.id) {
+          _selected = _selected!.copyWith(isAdmin: nextIsAdmin);
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<void> _manageRelationships(FamilyMember person) async {
+    final familyId = context.read<FamilySessionProvider>().familyId;
+    if (!_isAdmin || familyId == null) return;
+    final rels = (_tree?.relationships ?? const [])
+        .where((r) {
+          final source = (r['source'] ?? '').toString();
+          final target = (r['target'] ?? '').toString();
+          return source == person.id || target == person.id;
+        })
+        .where((r) {
+          final type =
+              (r['type'] ?? r['relationship_type'] ?? '').toString().toLowerCase();
+          return type.isNotEmpty && type != 'other' && type != 'unknown';
+        })
+        .toList();
+    if (rels.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No removable relationships for this person')),
+      );
+      return;
+    }
+
+    final byId = {for (final m in _tree?.members ?? const <FamilyMember>[]) m.id: m};
+    final picked = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: Text(
+                'Remove a relationship',
+                style: AppTheme.display(size: 18),
+              ),
+            ),
+            for (final r in rels)
+              ListTile(
+                title: Text(
+                  () {
+                    final source = (r['source'] ?? '').toString();
+                    final target = (r['target'] ?? '').toString();
+                    final otherId = source == person.id ? target : source;
+                    final other = byId[otherId]?.name ?? otherId;
+                    final type = (r['type'] ?? r['relationship_type'] ?? 'link')
+                        .toString();
+                    return '$type · $other';
+                  }(),
+                ),
+                trailing: const Icon(Icons.link_off, color: Color(0xFFBE123C)),
+                onTap: () => Navigator.pop(ctx, r),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final relId = (picked['id'] ?? '').toString();
+    if (relId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This link has no id and cannot be removed')),
+      );
+      return;
+    }
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove relationship?'),
+        content: const Text(
+          'This removes both directions of the link from the family graph.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFBE123C),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+    try {
+      await context
+          .read<FamilyApiService>()
+          .deleteFamilyRelationship(familyId, relId);
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
   }
 
   Future<void> _expand(FamilyMember person) async {
@@ -305,6 +543,44 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                   color: AppTheme.muted.withValues(alpha: 0.85),
                                 ),
                               ),
+                              if (_canAddOnTree &&
+                                  _unplacedMembers.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Place on tree',
+                                  style: AppTheme.body(
+                                    size: 12,
+                                    weight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                SizedBox(
+                                  height: 44,
+                                  child: ListView.separated(
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: _unplacedMembers.length,
+                                    separatorBuilder: (_, __) =>
+                                        const SizedBox(width: 8),
+                                    itemBuilder: (_, i) {
+                                      final m = _unplacedMembers[i];
+                                      return ActionChip(
+                                        avatar: CircleAvatar(
+                                          backgroundColor: AppTheme.forest
+                                              .withValues(alpha: 0.12),
+                                          child: Text(
+                                            m.name.isNotEmpty
+                                                ? m.name[0].toUpperCase()
+                                                : '?',
+                                            style: const TextStyle(fontSize: 11),
+                                          ),
+                                        ),
+                                        label: Text(m.name),
+                                        onPressed: () => _openLink(m),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -312,7 +588,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                           child: Stack(
                             children: [
                               FamilyGraphView(
-                                members: _tree?.members ?? const [],
+                                members: _placedMembers,
                                 relationships:
                                     _tree?.relationships ?? const [],
                                 focusUserId: _myFocusId,
@@ -356,7 +632,16 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       subtitle: Text(
-                                        _selected!.relationship ?? '',
+                                        [
+                                          if (_selected!.relationship != null)
+                                            _selected!.relationship!,
+                                          if (_selected!.isOwner)
+                                            'Owner'
+                                          else if (_selected!.isAdmin)
+                                            'Admin',
+                                          if (_selected!.invitePending)
+                                            'Pending',
+                                        ].join(' · '),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
@@ -381,6 +666,36 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                               icon: Icon(
                                                 Icons.chat_bubble,
                                                 color: AppTheme.accentPink,
+                                              ),
+                                            ),
+                                          if (_isAdmin &&
+                                              !_selected!.isOwner &&
+                                              _selected!.hasLoginAccount &&
+                                              _selected!.isAlive)
+                                            IconButton(
+                                              tooltip: _selected!.isAdmin
+                                                  ? 'Remove admin'
+                                                  : 'Make admin',
+                                              onPressed: () =>
+                                                  _toggleAdmin(_selected!),
+                                              icon: Icon(
+                                                _selected!.isAdmin
+                                                    ? Icons.shield_outlined
+                                                    : Icons
+                                                        .admin_panel_settings_outlined,
+                                                color: const Color(0xFF0369A1),
+                                              ),
+                                            ),
+                                          if (_isAdmin)
+                                            IconButton(
+                                              tooltip: 'Remove relationship',
+                                              onPressed: () =>
+                                                  _manageRelationships(
+                                                _selected!,
+                                              ),
+                                              icon: const Icon(
+                                                Icons.link_off,
+                                                color: Color(0xFFBE123C),
                                               ),
                                             ),
                                           if (_canAddOnTree)

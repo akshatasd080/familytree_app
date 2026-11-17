@@ -80,7 +80,7 @@ class AuthProvider extends ChangeNotifier {
         user = await _authApi.me();
       }
     } on ApiException catch (e) {
-      error = e.isFamilyInactive
+      error = e.isInactiveBlock
           ? {'code': e.code, 'message': e.message}
           : e.message;
       rethrow;

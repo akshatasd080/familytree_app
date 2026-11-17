@@ -87,6 +87,27 @@ class FamilyApiService {
   ) =>
       _api.put('/families/$familyId/members/$memberId', data: payload);
 
+  Future<Response> setFamilyMemberStatus(
+    String familyId,
+    String memberId,
+    bool isActive,
+  ) =>
+      _api.patch(
+        '/families/$familyId/members/$memberId/status',
+        data: {'isActive': isActive},
+      );
+
+  Future<Response> setFamilyMemberAdmin(
+    String familyId,
+    String memberId,
+    bool isAdmin,
+  ) =>
+      _api.patch(
+        '/families/$familyId/members/$memberId/admin',
+        data: {'isAdmin': isAdmin},
+      );
+
+  /// Soft-deactivates the member (no hard delete). Prefer [setFamilyMemberStatus].
   Future<Response> removeFamilyMember(String familyId, String memberId) =>
       _api.delete('/families/$familyId/members/$memberId');
 
@@ -95,6 +116,12 @@ class FamilyApiService {
     Map<String, dynamic> payload,
   ) =>
       _api.post('/families/$familyId/relationships', data: payload);
+
+  Future<Response> deleteFamilyRelationship(
+    String familyId,
+    String relationshipId,
+  ) =>
+      _api.delete('/families/$familyId/relationships/$relationshipId');
 
   Future<Response> getFamilyTree(
     String familyId, {

@@ -66,7 +66,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) context.go('/dashboard');
     } on ApiException catch (e) {
       setState(() {
-        _inactive = e.isFamilyInactive;
+        _inactive = e.isInactiveBlock;
         _error = e.message;
       });
     } catch (e) {
@@ -534,7 +534,7 @@ class _LoginScreenState extends State<LoginScreen> {
         style: AppTheme.body(color: AppTheme.mutedSoft, size: 13),
       ),
       const SizedBox(height: 14),
-      if (_inactive)
+      if (_inactive) ...[
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -542,12 +542,30 @@ class _LoginScreenState extends State<LoginScreen> {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AppTheme.amber200),
           ),
-          child: Text(
-            _error ??
-                'Your family has been deactivated. Please contact WeFamily Admin.',
-            style: AppTheme.body(size: 13, color: const Color(0xFF78350F)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                (_error ?? '').toLowerCase().contains('membership')
+                    ? 'Membership inactive'
+                    : 'Family inactive',
+                style: AppTheme.body(
+                  size: 13,
+                  weight: FontWeight.w800,
+                  color: const Color(0xFF78350F),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _error ??
+                    'Your family has been deactivated. Please contact WeFamily Admin.',
+                style: AppTheme.body(size: 13, color: const Color(0xFF78350F)),
+              ),
+            ],
           ),
         ),
+        const SizedBox(height: 10),
+      ],
       if (_error != null && !_inactive) ...[
         Container(
           padding: const EdgeInsets.all(12),

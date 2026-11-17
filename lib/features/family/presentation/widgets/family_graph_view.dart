@@ -93,21 +93,40 @@ class _FamilyGraphViewState extends State<FamilyGraphView> {
     });
   }
 
-  /// Web `fitTree`: scale + center so the whole diagram fits the phone.
+  /// Mobile-first fit: keep cards readable (not tiny), center on screen.
+  /// Pinch / +/- zoom still available to see the full tree.
   void _fitToViewport({bool force = false}) {
     if (_viewport == Size.zero || _content == Size.zero) return;
     final signature =
-        '${widget.members.length}_${_content.width.round()}_${_viewport.width.round()}';
+        '${widget.members.length}_${_content.width.round()}_${_viewport.width.round()}_${_viewport.height.round()}';
     if (!force && _fitSignature == signature) return;
     _fitSignature = signature;
 
-    const pad = 20.0;
+    final isPhone = _viewport.width < 700;
+    final pad = isPhone ? 12.0 : 24.0;
     final sx = (_viewport.width - pad * 2) / math.max(_content.width, 1);
     final sy = (_viewport.height - pad * 2) / math.max(_content.height, 1);
-    final scale = math.min(sx, sy).clamp(0.28, 1.15);
+    final fitAll = math.min(sx, sy);
 
+    // On phones, prefer readable card size over shrinking the whole tree.
+    // Target ~48% of screen width per card when the full-fit would look tiny.
+    final comfort = isPhone
+        ? ((_viewport.width * 0.48) / nodeW).clamp(0.9, 1.55)
+        : 1.0;
+
+    double scale;
+    if (isPhone && fitAll < comfort * 0.9) {
+      scale = comfort;
+    } else if (isPhone) {
+      // Small trees: scale up so the circle fills the phone better.
+      scale = math.max(fitAll, comfort * 0.92).clamp(0.85, 1.7);
+    } else {
+      scale = fitAll.clamp(0.35, 1.4);
+    }
+
+    // True center — horizontally and vertically.
     final dx = (_viewport.width - _content.width * scale) / 2;
-    final dy = math.max(pad, (_viewport.height - _content.height * scale) / 5);
+    final dy = (_viewport.height - _content.height * scale) / 2;
 
     _tx.value = Matrix4.identity()
       ..translateByDouble(dx, dy, 0, 1)
@@ -117,7 +136,7 @@ class _FamilyGraphViewState extends State<FamilyGraphView> {
 
   void _setZoom(double next) {
     if (_viewport == Size.zero) return;
-    final clamped = next.clamp(0.28, 2.2).toDouble();
+    final clamped = next.clamp(0.35, 2.8).toDouble();
     final current = _zoom;
     if (current <= 0) return;
     final focal = Offset(_viewport.width / 2, _viewport.height / 2);
@@ -158,9 +177,9 @@ class _FamilyGraphViewState extends State<FamilyGraphView> {
               child: InteractiveViewer(
                 transformationController: _tx,
                 constrained: false,
-                boundaryMargin: const EdgeInsets.all(400),
-                minScale: 0.25,
-                maxScale: 2.2,
+                boundaryMargin: const EdgeInsets.all(600),
+                minScale: 0.35,
+                maxScale: 2.8,
                 onInteractionEnd: (_) => setState(() {}),
                 child: SizedBox(
                   width: layout.width,
@@ -178,22 +197,22 @@ class _FamilyGraphViewState extends State<FamilyGraphView> {
                             child: DecoratedBox(
                               decoration: BoxDecoration(
                                 color: _parseHex(band.bg)
-                                    .withValues(alpha: 0.35),
+                                    .withValues(alpha: 0.42),
                               ),
                               child: Align(
                                 alignment: Alignment.centerLeft,
                                 child: Padding(
-                                  padding: const EdgeInsets.only(left: 12),
+                                  padding: const EdgeInsets.only(left: 10),
                                   child: SizedBox(
-                                    width: 120,
+                                    width: 108,
                                     child: Text(
                                       band.title,
                                       maxLines: 3,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
                                         color: _parseHex(band.ink),
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 11,
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 12,
                                         height: 1.2,
                                       ),
                                     ),
@@ -266,11 +285,11 @@ class _FamilyGraphViewState extends State<FamilyGraphView> {
                       IconButton(
                         tooltip: 'Zoom out',
                         visualDensity: VisualDensity.compact,
-                        onPressed: () => _setZoom(_zoom - 0.1),
+                        onPressed: () => _setZoom(_zoom - 0.15),
                         icon: const Icon(Icons.remove, size: 18),
                       ),
                       SizedBox(
-                        width: 40,
+                        width: 44,
                         child: Text(
                           '${(_zoom * 100).round()}%',
                           textAlign: TextAlign.center,
@@ -283,7 +302,7 @@ class _FamilyGraphViewState extends State<FamilyGraphView> {
                       IconButton(
                         tooltip: 'Zoom in',
                         visualDensity: VisualDensity.compact,
-                        onPressed: () => _setZoom(_zoom + 0.1),
+                        onPressed: () => _setZoom(_zoom + 0.15),
                         icon: const Icon(Icons.add, size: 18),
                       ),
                       Container(
@@ -409,23 +428,23 @@ class _MemberNode extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
         decoration: BoxDecoration(
           color: AppTheme.card,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isMe
                 ? const Color(0xFFFBBF24)
                 : pending
                     ? const Color(0xFFFECACA)
                     : AppTheme.border,
-            width: isMe ? 2 : 1,
+            width: isMe ? 2.5 : 1.2,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
           ],
         ),
@@ -442,7 +461,7 @@ class _MemberNode extends StatelessWidget {
                       clipBehavior: Clip.none,
                       children: [
                         CircleAvatar(
-                          radius: 16,
+                          radius: 20,
                           backgroundColor:
                               AppTheme.forest.withValues(alpha: 0.12),
                           backgroundImage:
@@ -453,7 +472,7 @@ class _MemberNode extends StatelessWidget {
                                       ? member.name[0].toUpperCase()
                                       : '?',
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: 14,
                                     fontWeight: FontWeight.w800,
                                     color: AppTheme.forest,
                                   ),
@@ -493,7 +512,7 @@ class _MemberNode extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontWeight: FontWeight.w800,
-                                    fontSize: 13,
+                                    fontSize: 14,
                                     color: pending
                                         ? const Color(0xFF9F1239)
                                         : const Color(0xFF1E293B),
@@ -505,7 +524,7 @@ class _MemberNode extends StatelessWidget {
                                   margin: const EdgeInsets.only(left: 4),
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 6,
-                                    vertical: 1,
+                                    vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFFFBBF24),
@@ -514,7 +533,7 @@ class _MemberNode extends StatelessWidget {
                                   child: const Text(
                                     'YOU',
                                     style: TextStyle(
-                                      fontSize: 8,
+                                      fontSize: 9,
                                       fontWeight: FontWeight.w800,
                                       color: Colors.white,
                                     ),
@@ -525,7 +544,7 @@ class _MemberNode extends StatelessWidget {
                                   margin: const EdgeInsets.only(left: 4),
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 6,
-                                    vertical: 1,
+                                    vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
                                     color: const Color(0xFFFFF1F2),
@@ -537,7 +556,7 @@ class _MemberNode extends StatelessWidget {
                                   child: const Text(
                                     'PENDING',
                                     style: TextStyle(
-                                      fontSize: 8,
+                                      fontSize: 9,
                                       fontWeight: FontWeight.w800,
                                       color: Color(0xFFE11D48),
                                     ),
@@ -545,14 +564,14 @@ class _MemberNode extends StatelessWidget {
                                 ),
                             ],
                           ),
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 3),
                           Text(
                             roleLabel,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
                               color: Color(0xFF1E40AF),
                             ),
                           ),
@@ -563,7 +582,7 @@ class _MemberNode extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Row(
               children: [
                 _NodeAction(
@@ -574,7 +593,7 @@ class _MemberNode extends StatelessWidget {
                   onTap: onTap,
                 ),
                 if (canAdd && onLink != null) ...[
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 6),
                   _NodeAction(
                     icon: Icons.link,
                     color: Colors.white,
@@ -583,7 +602,7 @@ class _MemberNode extends StatelessWidget {
                   ),
                 ],
                 if (canAdd && onAdd != null) ...[
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 6),
                   _NodeAction(
                     icon: Icons.add,
                     color: Colors.white,
@@ -592,7 +611,7 @@ class _MemberNode extends StatelessWidget {
                   ),
                 ],
                 if (showExpand && onExpand != null) ...[
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 6),
                   _NodeAction(
                     icon: Icons.unfold_more,
                     color: AppTheme.forest,
@@ -628,20 +647,20 @@ class _NodeAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 26,
-      height: 26,
+      width: 30,
+      height: 30,
       child: Material(
         color: bg,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(8),
           child: DecoratedBox(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(8),
               border: border == null ? null : Border.all(color: border!),
             ),
-            child: Icon(icon, size: 14, color: color),
+            child: Icon(icon, size: 16, color: color),
           ),
         ),
       ),
@@ -658,13 +677,15 @@ class _LayoutEdgePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     for (final edge in edges) {
       if (edge.points.length < 2) continue;
+      final isSpouse = edge.kind == 'spouse';
       final paint = Paint()
-        ..color = edge.kind == 'spouse'
-            ? AppTheme.accentPink.withValues(alpha: 0.55)
-            : const Color(0xFF2563EB).withValues(alpha: 0.55)
-        ..strokeWidth = edge.kind == 'spouse' ? 1.8 : 1.6
+        ..color = isSpouse
+            ? AppTheme.accentPink.withValues(alpha: 0.75)
+            : const Color(0xFF2563EB).withValues(alpha: 0.72)
+        ..strokeWidth = isSpouse ? 3.2 : 2.8
         ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round;
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
       final path = Path()..moveTo(edge.points.first.dx, edge.points.first.dy);
       for (var i = 1; i < edge.points.length; i++) {
         path.lineTo(edge.points[i].dx, edge.points[i].dy);

@@ -190,8 +190,12 @@ class _MemberPreviewSheet extends StatelessWidget {
                                         _Chip(
                                           label: (member.status ?? 'ACTIVE')
                                               .toUpperCase(),
-                                          color: const Color(0xFF059669),
-                                          bg: const Color(0xFFD1FAE5),
+                                          color: member.isMembershipActive
+                                              ? const Color(0xFF059669)
+                                              : const Color(0xFFB45309),
+                                          bg: member.isMembershipActive
+                                              ? const Color(0xFFD1FAE5)
+                                              : const Color(0xFFFEF3C7),
                                         ),
                                         _Chip(
                                           label: member.isAlive
@@ -204,6 +208,24 @@ class _MemberPreviewSheet extends StatelessWidget {
                                               ? const Color(0xFFE0F2FE)
                                               : const Color(0xFFFFE4E6),
                                         ),
+                                        if (member.isOwner)
+                                          const _Chip(
+                                            label: 'Owner',
+                                            color: Color(0xFF7C3AED),
+                                            bg: Color(0xFFEDE9FE),
+                                          )
+                                        else if (member.isAdmin)
+                                          const _Chip(
+                                            label: 'Admin',
+                                            color: Color(0xFF0369A1),
+                                            bg: Color(0xFFE0F2FE),
+                                          ),
+                                        if (member.invitePending)
+                                          const _Chip(
+                                            label: 'Pending',
+                                            color: Color(0xFFC2410C),
+                                            bg: Color(0xFFFFEDD5),
+                                          ),
                                       ],
                                     ),
                                   ],
@@ -288,8 +310,77 @@ class _MemberPreviewSheet extends StatelessWidget {
                           ),
                         ],
                       ),
-                      if (isAdmin && !member.isSiteCreator) ...[
+                      if (isAdmin && !member.isOwner) ...[
                         const SizedBox(height: 8),
+                        if (member.hasLoginAccount && member.isAlive)
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                final nextAdmin = !member.isAdmin;
+                                final ok = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: Text(
+                                      nextAdmin
+                                          ? 'Make ${member.name} an admin?'
+                                          : 'Remove admin from ${member.name}?',
+                                    ),
+                                    content: Text(
+                                      nextAdmin
+                                          ? 'They can manage members, join requests, and family settings.'
+                                          : 'They will become a regular family member.',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, false),
+                                        child: const Text('Cancel'),
+                                      ),
+                                      FilledButton(
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, true),
+                                        child: Text(
+                                          nextAdmin
+                                              ? 'Make admin'
+                                              : 'Remove admin',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (ok != true || !context.mounted) return;
+                                try {
+                                  await context
+                                      .read<FamilyApiService>()
+                                      .setFamilyMemberAdmin(
+                                        familyId,
+                                        member.id,
+                                        nextAdmin,
+                                      );
+                                  if (!context.mounted) return;
+                                  Navigator.pop(context);
+                                  await onChanged();
+                                } catch (e) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('$e')),
+                                  );
+                                }
+                              },
+                              icon: Icon(
+                                member.isAdmin
+                                    ? Icons.shield_outlined
+                                    : Icons.admin_panel_settings_outlined,
+                                size: 18,
+                              ),
+                              label: Text(
+                                member.isAdmin ? 'Remove admin' : 'Make admin',
+                              ),
+                            ),
+                          ),
+                        if (member.hasLoginAccount && member.isAlive)
+                          const SizedBox(height: 8),
                         Row(
                           children: [
                             if (member.isAlive)
@@ -363,15 +454,24 @@ class _MemberPreviewSheet extends StatelessWidget {
                             Expanded(
                               child: OutlinedButton.icon(
                                 style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.redAccent,
+                                  foregroundColor: member.isMembershipActive
+                                      ? const Color(0xFFB45309)
+                                      : const Color(0xFF059669),
                                 ),
                                 onPressed: () async {
+                                  final nextActive = !member.isMembershipActive;
                                   final ok = await showDialog<bool>(
                                     context: context,
                                     builder: (ctx) => AlertDialog(
-                                      title: Text('Remove ${member.name}?'),
-                                      content: const Text(
-                                        'This removes them from the family. This cannot be undone easily.',
+                                      title: Text(
+                                        nextActive
+                                            ? 'Activate ${member.name}?'
+                                            : 'Deactivate ${member.name}?',
+                                      ),
+                                      content: Text(
+                                        nextActive
+                                            ? 'They can sign in and use this family again.'
+                                            : 'They stay on the tree but cannot sign in until reactivated.',
                                       ),
                                       actions: [
                                         TextButton(
@@ -381,11 +481,17 @@ class _MemberPreviewSheet extends StatelessWidget {
                                         ),
                                         FilledButton(
                                           style: FilledButton.styleFrom(
-                                            backgroundColor: Colors.redAccent,
+                                            backgroundColor: nextActive
+                                                ? const Color(0xFF059669)
+                                                : const Color(0xFFB45309),
                                           ),
                                           onPressed: () =>
                                               Navigator.pop(ctx, true),
-                                          child: const Text('Remove'),
+                                          child: Text(
+                                            nextActive
+                                                ? 'Activate'
+                                                : 'Deactivate',
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -394,9 +500,10 @@ class _MemberPreviewSheet extends StatelessWidget {
                                   try {
                                     await context
                                         .read<FamilyApiService>()
-                                        .removeFamilyMember(
+                                        .setFamilyMemberStatus(
                                           familyId,
                                           member.id,
+                                          nextActive,
                                         );
                                     if (!context.mounted) return;
                                     Navigator.pop(context);
@@ -408,11 +515,17 @@ class _MemberPreviewSheet extends StatelessWidget {
                                     );
                                   }
                                 },
-                                icon: const Icon(
-                                  Icons.person_remove_outlined,
+                                icon: Icon(
+                                  member.isMembershipActive
+                                      ? Icons.person_off_outlined
+                                      : Icons.person_add_alt_1_outlined,
                                   size: 18,
                                 ),
-                                label: const Text('Remove'),
+                                label: Text(
+                                  member.isMembershipActive
+                                      ? 'Deactivate'
+                                      : 'Activate',
+                                ),
                               ),
                             ),
                           ],
@@ -597,7 +710,14 @@ class _MemberEditSheetState extends State<_MemberEditSheet> {
       setState(() => _error = 'Enter a valid name.');
       return;
     }
-    if (!RegExp(r'^\d{10}$').hasMatch(phone)) {
+    final needsPhone = widget.member.isAlive && phone.isNotEmpty;
+    if (needsPhone && !RegExp(r'^\d{10}$').hasMatch(phone)) {
+      setState(() => _error = 'Mobile number must be exactly 10 digits.');
+      return;
+    }
+    if (widget.member.isAlive &&
+        widget.member.hasLoginAccount &&
+        !RegExp(r'^\d{10}$').hasMatch(phone)) {
       setState(() => _error = 'Mobile number must be exactly 10 digits.');
       return;
     }
@@ -613,10 +733,10 @@ class _MemberEditSheetState extends State<_MemberEditSheet> {
     try {
       final payload = <String, dynamic>{
         'name': _name.text.trim(),
-        'phone': phone,
         'location': _location.text.trim(),
         'notes': _notes.text.trim(),
       };
+      if (phone.isNotEmpty) payload['phone'] = phone;
       if (!widget.member.isSiteCreator) {
         payload['relationship'] = _relationship;
       }

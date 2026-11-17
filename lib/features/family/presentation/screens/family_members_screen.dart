@@ -342,6 +342,18 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
     }
   }
 
+  int? _ageFromDob(String dob) {
+    final dt = DateTime.tryParse(dob);
+    if (dt == null) return null;
+    final now = DateTime.now();
+    var age = now.year - dt.year;
+    if (now.month < dt.month ||
+        (now.month == dt.month && now.day < dt.day)) {
+      age -= 1;
+    }
+    return age;
+  }
+
   Future<void> _addMember() async {
     final familyId = context.read<FamilySessionProvider>().familyId;
     if (familyId == null) return;
@@ -352,6 +364,8 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
     final location = TextEditingController();
     var relationship = 'Relative';
     var isAlive = true;
+    var dob = '';
+    var withMobile = true;
 
     final ok = await showModalBottomSheet<bool>(
       context: context,
@@ -360,95 +374,160 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
       showDragHandle: true,
       backgroundColor: AppTheme.canvas,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            bottom: MediaQuery.viewInsetsOf(ctx).bottom + 16,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Add member', style: AppTheme.display(size: 20)),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    ChoiceChip(
-                      label: const Text('Living'),
-                      selected: isAlive,
-                      onSelected: (_) => setLocal(() => isAlive = true),
-                    ),
-                    const SizedBox(width: 8),
-                    ChoiceChip(
-                      label: const Text('Memorial'),
-                      selected: !isAlive,
-                      onSelected: (_) => setLocal(() => isAlive = false),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: name,
-                  decoration: const InputDecoration(labelText: 'Name'),
-                ),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: relationship,
-                  decoration:
-                      const InputDecoration(labelText: 'Relationship'),
-                  items: [
-                    for (final r in _relationships)
-                      DropdownMenuItem(value: r, child: Text(r)),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) setLocal(() => relationship = v);
-                  },
-                ),
-                if (isAlive) ...[
-                  const SizedBox(height: 8),
+        builder: (ctx, setLocal) {
+          final age = _ageFromDob(dob);
+          final isMinor = age != null && age < 18;
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              bottom: MediaQuery.viewInsetsOf(ctx).bottom + 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Add member', style: AppTheme.display(size: 20)),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      ChoiceChip(
+                        label: const Text('Living'),
+                        selected: isAlive,
+                        onSelected: (_) => setLocal(() {
+                          isAlive = true;
+                        }),
+                      ),
+                      const SizedBox(width: 8),
+                      ChoiceChip(
+                        label: const Text('Memorial'),
+                        selected: !isAlive,
+                        onSelected: (_) => setLocal(() {
+                          isAlive = false;
+                          withMobile = true;
+                        }),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
                   TextField(
-                    controller: phone,
-                    keyboardType: TextInputType.phone,
-                    maxLength: 10,
-                    decoration: const InputDecoration(
-                      labelText: 'Mobile (+91)',
-                      counterText: '',
-                    ),
+                    controller: name,
+                    decoration: const InputDecoration(labelText: 'Name'),
                   ),
                   const SizedBox(height: 8),
-                  TextField(
-                    controller: email,
-                    decoration: const InputDecoration(
-                      labelText: 'Email (optional)',
-                    ),
+                  DropdownButtonFormField<String>(
+                    value: relationship,
+                    decoration:
+                        const InputDecoration(labelText: 'Relationship'),
+                    items: [
+                      for (final r in _relationships)
+                        DropdownMenuItem(value: r, child: Text(r)),
+                    ],
+                    onChanged: (v) {
+                      if (v != null) setLocal(() => relationship = v);
+                    },
                   ),
                   const SizedBox(height: 8),
-                  TextField(
-                    controller: location,
+                  InputDecorator(
                     decoration: const InputDecoration(
-                      labelText: 'Location',
-                      hintText: 'City, State',
+                      labelText: 'Date of birth',
+                      suffixIcon: Icon(Icons.calendar_today, size: 18),
+                      helperText:
+                          'Required for under-18 members without mobile login.',
+                    ),
+                    child: InkWell(
+                      onTap: () async {
+                        final now = DateTime.now();
+                        final picked = await showDatePicker(
+                          context: ctx,
+                          initialDate: DateTime(now.year - 12),
+                          firstDate: DateTime(1900),
+                          lastDate: now,
+                        );
+                        if (picked != null) {
+                          setLocal(() {
+                            dob =
+                                '${picked.year.toString().padLeft(4, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                            final nextAge = _ageFromDob(dob);
+                            if (nextAge != null && nextAge >= 18) {
+                              withMobile = true;
+                            }
+                          });
+                        }
+                      },
+                      child: Text(
+                        dob.isEmpty ? 'Select date (optional)' : dob,
+                        style: AppTheme.body(
+                          color: dob.isEmpty ? AppTheme.muted : AppTheme.ink,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (isAlive) ...[
+                    if (isMinor) ...[
+                      const SizedBox(height: 8),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Give mobile login'),
+                        subtitle: const Text(
+                          'Off = under-18 member with no account',
+                        ),
+                        value: withMobile,
+                        onChanged: (v) => setLocal(() => withMobile = v),
+                      ),
+                    ],
+                    if (!isMinor || withMobile) ...[
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: phone,
+                        keyboardType: TextInputType.phone,
+                        maxLength: 10,
+                        decoration: const InputDecoration(
+                          labelText: 'Mobile (+91)',
+                          counterText: '',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: email,
+                        decoration: const InputDecoration(
+                          labelText: 'Email (optional)',
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: location,
+                      decoration: const InputDecoration(
+                        labelText: 'Location',
+                        hintText: 'City, State',
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: notes,
+                    decoration: const InputDecoration(labelText: 'Notes'),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: Text(
+                        !isAlive
+                            ? 'Save memorial'
+                            : (isMinor && !withMobile)
+                                ? 'Save without login'
+                                : 'Send invite',
+                      ),
                     ),
                   ),
                 ],
-                const SizedBox(height: 8),
-                TextField(
-                  controller: notes,
-                  decoration: const InputDecoration(labelText: 'Notes'),
-                ),
-                const SizedBox(height: 14),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () => Navigator.pop(ctx, true),
-                    child: Text(isAlive ? 'Send invite' : 'Save memorial'),
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
     if (ok != true || !mounted) return;
@@ -460,35 +539,71 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
           'name': name.text.trim(),
           'relationship': relationship,
           'isAlive': false,
+          if (dob.isNotEmpty) 'dateOfBirth': dob,
           'profileInfo': {
             'isAlive': false,
+            if (dob.isNotEmpty) 'dateOfBirth': dob,
             if (notes.text.trim().isNotEmpty) 'notes': notes.text.trim(),
           },
         });
       } else {
-        final p = phone.text.replaceAll(RegExp(r'\D'), '');
-        if (!RegExp(r'^[6-9]\d{9}$').hasMatch(p)) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Enter a valid 10-digit mobile number'),
-            ),
-          );
-          return;
-        }
-        await api.addFamilyMemberWithOtp(familyId, {
-          'name': name.text.trim(),
-          'phone': p,
-          if (email.text.trim().isNotEmpty)
-            'email': email.text.trim().toLowerCase(),
-          'relationship': relationship,
-          'profileInfo': {
-            'phone': p,
-            if (location.text.trim().isNotEmpty)
-              'location': location.text.trim(),
-            if (notes.text.trim().isNotEmpty) 'notes': notes.text.trim(),
+        final age = _ageFromDob(dob);
+        final isMinor = age != null && age < 18;
+        final withoutMobile = isMinor && !withMobile;
+        if (withoutMobile) {
+          if (dob.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Date of birth is required for under-18 without mobile.',
+                ),
+              ),
+            );
+            return;
+          }
+          await api.addFamilyMemberWithOtp(familyId, {
+            'name': name.text.trim(),
+            'relationship': relationship,
             'isAlive': true,
-          },
-        });
+            'withoutMobile': true,
+            'dateOfBirth': dob,
+            'profileInfo': {
+              'dateOfBirth': dob,
+              'withoutMobile': true,
+              'requireLogin': false,
+              if (location.text.trim().isNotEmpty)
+                'location': location.text.trim(),
+              if (notes.text.trim().isNotEmpty) 'notes': notes.text.trim(),
+              'isAlive': true,
+            },
+          });
+        } else {
+          final p = phone.text.replaceAll(RegExp(r'\D'), '');
+          if (!RegExp(r'^[6-9]\d{9}$').hasMatch(p)) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Enter a valid 10-digit mobile number'),
+              ),
+            );
+            return;
+          }
+          await api.addFamilyMemberWithOtp(familyId, {
+            'name': name.text.trim(),
+            'phone': p,
+            if (email.text.trim().isNotEmpty)
+              'email': email.text.trim().toLowerCase(),
+            'relationship': relationship,
+            if (dob.isNotEmpty) 'dateOfBirth': dob,
+            'profileInfo': {
+              'phone': p,
+              if (dob.isNotEmpty) 'dateOfBirth': dob,
+              if (location.text.trim().isNotEmpty)
+                'location': location.text.trim(),
+              if (notes.text.trim().isNotEmpty) 'notes': notes.text.trim(),
+              'isAlive': true,
+            },
+          });
+        }
       }
       _load();
     } catch (e) {
@@ -500,20 +615,24 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
   @override
   Widget build(BuildContext context) {
     final activeCount =
-        _members.where((m) => (m.status ?? '').toUpperCase() != 'PENDING').length;
+        _members.where((m) => m.isMembershipActive && m.isAlive).length;
+    final inactiveCount =
+        _members.where((m) => !m.isMembershipActive).length;
 
     return FtPage(
       title: 'Members',
       actions: [
         IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
       ],
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addMember,
-        backgroundColor: AppTheme.forest,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.person_add),
-        label: const Text('Add'),
-      ),
+      floatingActionButton: _isAdmin
+          ? FloatingActionButton.extended(
+              onPressed: _addMember,
+              backgroundColor: AppTheme.forest,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.person_add),
+              label: const Text('Add'),
+            )
+          : null,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -547,6 +666,12 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
                         value: '$activeCount',
                         color: const Color(0xFF059669),
                       ),
+                      if (inactiveCount > 0)
+                        _StatChip(
+                          label: 'Inactive',
+                          value: '$inactiveCount',
+                          color: const Color(0xFFB45309),
+                        ),
                       _StatChip(
                         label: 'Invites',
                         value: '${_pendingInvites.length}',
@@ -1012,9 +1137,43 @@ class _MemberCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: AppTheme.body(
                           size: 12,
-                          color: AppTheme.muted,
+                          color: member.isMembershipActive
+                              ? AppTheme.muted
+                              : const Color(0xFFB45309),
                           weight: FontWeight.w600,
                         ),
+                      ),
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: [
+                          if (member.isOwner)
+                            _MiniBadge(
+                              label: 'Owner',
+                              color: const Color(0xFF7C3AED),
+                            )
+                          else if (member.isAdmin)
+                            _MiniBadge(
+                              label: 'Admin',
+                              color: const Color(0xFF0369A1),
+                            ),
+                          if (!member.isAlive)
+                            _MiniBadge(
+                              label: 'Memorial',
+                              color: const Color(0xFFBE123C),
+                            ),
+                          if (!member.isMembershipActive)
+                            _MiniBadge(
+                              label: 'Inactive',
+                              color: const Color(0xFFB45309),
+                            ),
+                          if (member.invitePending)
+                            _MiniBadge(
+                              label: 'Pending',
+                              color: const Color(0xFFC2410C),
+                            ),
+                        ],
                       ),
                       if (phone.isNotEmpty || email.isNotEmpty) ...[
                         const SizedBox(height: 4),
@@ -1037,6 +1196,32 @@ class _MemberCard extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniBadge extends StatelessWidget {
+  const _MiniBadge({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          color: color,
         ),
       ),
     );

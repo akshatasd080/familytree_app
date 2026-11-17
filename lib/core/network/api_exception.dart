@@ -13,6 +13,10 @@ class ApiException implements Exception {
 
   bool get isFamilyInactive => code == 'FAMILY_INACTIVE';
 
+  bool get isMemberInactive => code == 'MEMBER_INACTIVE';
+
+  bool get isInactiveBlock => isFamilyInactive || isMemberInactive;
+
   @override
   String toString() => message;
 }

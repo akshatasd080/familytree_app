@@ -33,7 +33,7 @@ class ApiClient {
         onError: (error, handler) {
           final data = error.response?.data;
           final code = data is Map ? data['code']?.toString() : null;
-          if (code == 'FAMILY_INACTIVE') {
+          if (code == 'FAMILY_INACTIVE' || code == 'MEMBER_INACTIVE') {
             clearToken();
             _onFamilyInactive?.call();
           }
