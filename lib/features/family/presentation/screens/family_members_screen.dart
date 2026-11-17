@@ -1,14 +1,17 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
 import '../../../../core/widgets/ft_page.dart';
 import '../../../../core/widgets/responsive.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../data/family_api_service.dart';
 import '../../data/models/family_models.dart';
+import '../../domain/family_graph_layout.dart';
 import '../providers/family_providers.dart';
 import '../widgets/member_preview_sheet.dart';
+import '../widgets/state_city_select.dart';
 
 const _relationships = [
   'Father',
@@ -39,6 +42,7 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
   List<Map<String, dynamic>> _myInvites = const [];
   List<Map<String, dynamic>> _linkRequests = const [];
   List<Map<String, dynamic>> _linkResults = const [];
+  Map<String, String> _displayRoles = const {};
   final _search = TextEditingController();
   final _linkQuery = TextEditingController();
   String _query = '';
@@ -46,19 +50,8 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
   bool _linkBusy = false;
   String? _error;
 
-  bool get _isAdmin {
-    final role =
-        (context.read<FamilySessionProvider>().current?.role ?? '')
-            .toLowerCase();
-    final rel = (context.read<FamilySessionProvider>().current?.relationship ??
-            '')
-        .toLowerCase()
-        .replaceAll(' ', '');
-    return role == 'admin' ||
-        role == 'creator' ||
-        role == 'owner' ||
-        rel == 'sitecreator';
-  }
+  bool get _isAdmin =>
+      _computeIsAdmin(context.read<FamilySessionProvider>());
 
   @override
   void initState() {
@@ -119,15 +112,16 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
       } else if (mdata is List) {
         list = mdata;
       }
-      _members = list
+      final parsedMembers = list
           .whereType<Map>()
           .map((e) => FamilyMember.fromJson(Map<String, dynamic>.from(e)))
           .toList();
-      _pendingInvites = pending
+      final parsedPending = pending
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
 
+      var joinRequests = const <Map<String, dynamic>>[];
       try {
         final joins = await api.listFamilyJoinRequests(familyId);
         final jdata = joins.data;
@@ -137,14 +131,13 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
         } else if (jdata is List) {
           jlist = jdata;
         }
-        _joinRequests = jlist
+        joinRequests = jlist
             .whereType<Map>()
             .map((e) => Map<String, dynamic>.from(e))
             .toList();
-      } catch (_) {
-        _joinRequests = const [];
-      }
+      } catch (_) {}
 
+      var myInvites = const <Map<String, dynamic>>[];
       try {
         final mine = await api.listMyInvitations();
         final idata = mine.data;
@@ -154,15 +147,15 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
         } else if (idata is List) {
           ilist = idata;
         }
-        _myInvites = ilist
+        myInvites = ilist
             .whereType<Map>()
             .map((e) => Map<String, dynamic>.from(e))
             .toList();
-      } catch (_) {
-        _myInvites = const [];
-      }
+      } catch (_) {}
 
-      if (_isAdmin) {
+      var linkRequests = const <Map<String, dynamic>>[];
+      final isAdmin = _computeIsAdmin(session);
+      if (isAdmin) {
         try {
           final links = await api.listFamilyLinkRequests(familyId);
           final ldata = links.data;
@@ -172,21 +165,105 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
           } else if (ldata is List) {
             llist = ldata;
           }
-          _linkRequests = llist
+          linkRequests = llist
               .whereType<Map>()
               .map((e) => Map<String, dynamic>.from(e))
               .toList();
-        } catch (_) {
-          _linkRequests = const [];
-        }
-      } else {
-        _linkRequests = const [];
+        } catch (_) {}
       }
+
+      // Web parity: ego-relative labels (You / Mother / …)
+      var roles = <String, String>{};
+      try {
+        final treeRes = await api.getFamilyTree(
+          familyId,
+          params: const {'scope': 'full'},
+        );
+        final tdata = treeRes.data is Map
+            ? Map<String, dynamic>.from(treeRes.data as Map)
+            : <String, dynamic>{};
+        final tMembers = (tdata['members'] is List)
+            ? (tdata['members'] as List)
+                .whereType<Map>()
+                .map((e) => Map<String, dynamic>.from(e))
+                .toList()
+            : parsedMembers
+                .map(
+                  (m) => {
+                    'id': m.id,
+                    'userId': m.userId,
+                    'name': m.name,
+                    'gender': m.gender,
+                    'relationship': m.relationship,
+                  },
+                )
+                .toList();
+        final tRels = (tdata['relationships'] is List)
+            ? (tdata['relationships'] as List)
+                .whereType<Map>()
+                .map((e) => Map<String, dynamic>.from(e))
+                .toList()
+            : <Map<String, dynamic>>[];
+        final focusId = context.read<AuthProvider>().user?.id;
+        final layout = buildFamilyLayout(tMembers, tRels, focusId);
+        for (final node in layout.nodes) {
+          final id = node['id']?.toString();
+          final role = node['treeRole']?.toString();
+          if (id != null && role != null && role.trim().isNotEmpty) {
+            roles[id] = role.trim();
+          }
+        }
+      } catch (_) {}
+
+      if (!mounted) return;
+      setState(() {
+        _members = parsedMembers;
+        _pendingInvites = parsedPending;
+        _joinRequests = joinRequests;
+        _myInvites = myInvites;
+        _linkRequests = linkRequests;
+        _displayRoles = roles;
+        _loading = false;
+        _error = null;
+      });
     } catch (e) {
-      _error = e.toString();
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
     }
+  }
+
+  String _relationLabel(FamilyMember m) {
+    final role = _displayRoles[m.id];
+    if (role != null && role.isNotEmpty) return role;
+    final myId = context.read<AuthProvider>().user?.id;
+    if (myId != null &&
+        myId.isNotEmpty &&
+        (m.userId ?? '') == myId) {
+      return 'You';
+    }
+    if (m.isSiteCreator) return 'Family owner';
+    final rel = (m.relationship ?? '').trim();
+    if (rel.isEmpty) return 'Family';
+    if (rel.toLowerCase().replaceAll(RegExp(r'[\s_-]+'), '') == 'sitecreator') {
+      return 'Family owner';
+    }
+    return rel;
+  }
+
+  bool _computeIsAdmin(FamilySessionProvider session) {
+    final current = session.current;
+    if (current == null) return false;
+    if (current.isAdmin || current.isCreator) return true;
+    final role = (current.role ?? '').toLowerCase();
+    final rel =
+        (current.relationship ?? '').toLowerCase().replaceAll(RegExp(r'[\s_-]+'), '');
+    return role == 'admin' ||
+        role == 'creator' ||
+        role == 'owner' ||
+        rel == 'sitecreator';
   }
 
   Future<void> _openPreview(FamilyMember member) async {
@@ -361,7 +438,7 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
     final email = TextEditingController();
     final phone = TextEditingController();
     final notes = TextEditingController();
-    final location = TextEditingController();
+    var location = '';
     var relationship = 'Relative';
     var isAlive = true;
     var dob = '';
@@ -504,12 +581,9 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
                       ),
                     ],
                     const SizedBox(height: 8),
-                    TextField(
-                      controller: location,
-                      decoration: const InputDecoration(
-                        labelText: 'Location',
-                        hintText: 'City, State',
-                      ),
+                    StateCitySelect(
+                      value: location,
+                      onChanged: (v) => setLocal(() => location = v),
                     ),
                   ],
                   const SizedBox(height: 8),
@@ -551,6 +625,7 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
           'profileInfo': {
             'isAlive': false,
             if (dob.isNotEmpty) 'dateOfBirth': dob,
+            if (location.trim().isNotEmpty) 'location': location.trim(),
             if (notes.text.trim().isNotEmpty) 'notes': notes.text.trim(),
           },
         });
@@ -579,8 +654,7 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
               'dateOfBirth': dob,
               'withoutMobile': true,
               'requireLogin': false,
-              if (location.text.trim().isNotEmpty)
-                'location': location.text.trim(),
+              if (location.trim().isNotEmpty) 'location': location.trim(),
               if (notes.text.trim().isNotEmpty) 'notes': notes.text.trim(),
               'isAlive': true,
             },
@@ -605,8 +679,7 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
             'profileInfo': {
               'phone': p,
               if (dob.isNotEmpty) 'dateOfBirth': dob,
-              if (location.text.trim().isNotEmpty)
-                'location': location.text.trim(),
+              if (location.trim().isNotEmpty) 'location': location.trim(),
               if (notes.text.trim().isNotEmpty) 'notes': notes.text.trim(),
               'isAlive': true,
             },
@@ -622,10 +695,9 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final activeCount =
-        _members.where((m) => m.isMembershipActive && m.isAlive).length;
-    final inactiveCount =
-        _members.where((m) => !m.isMembershipActive).length;
+    final session = context.watch<FamilySessionProvider>();
+    final activeCount = _members.length;
+    final familyName = session.current?.name ?? 'Your family';
 
     return FtPage(
       title: 'Members',
@@ -641,76 +713,73 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
               label: const Text('Add'),
             )
           : null,
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ListView(
-                padding: context.pagePadding,
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: context.pagePadding,
+          children: [
+            // Web-style header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppTheme.emerald50,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: AppTheme.emerald100),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (_error != null)
-                    Text(_error!, style: const TextStyle(color: Colors.red)),
-                  TextField(
-                    controller: _search,
-                    onChanged: (v) => setState(() => _query = v),
-                    decoration: InputDecoration(
-                      hintText: 'Search members…',
-                      prefixIcon: const Icon(Icons.search),
-                      filled: true,
-                      fillColor: AppTheme.card,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide.none,
-                      ),
+                  Icon(Icons.groups, size: 14, color: AppTheme.emerald600),
+                  const SizedBox(width: 6),
+                  Text(
+                    familyName,
+                    style: AppTheme.body(
+                      size: 11,
+                      weight: FontWeight.w700,
+                      color: const Color(0xFF065F46),
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _StatChip(
-                        label: 'Active',
-                        value: '$activeCount',
-                        color: const Color(0xFF059669),
-                      ),
-                      if (inactiveCount > 0)
-                        _StatChip(
-                          label: 'Inactive',
-                          value: '$inactiveCount',
-                          color: const Color(0xFFB45309),
-                        ),
-                      _StatChip(
-                        label: 'Invites',
-                        value: '${_pendingInvites.length}',
-                        color: const Color(0xFFEA580C),
-                      ),
-                      _StatChip(
-                        label: 'Join requests',
-                        value: '${_joinRequests.length}',
-                        color: const Color(0xFF0284C7),
-                      ),
-                    ],
-                  ),
-                  if (_isAdmin) ...[
-                    const SizedBox(height: 16),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Family Members',
+              style: AppTheme.display(size: 24),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Manage people, invites, and join requests for your tree.',
+              style: AppTheme.body(size: 13, color: AppTheme.muted),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(_error!, style: const TextStyle(color: Colors.red)),
+            ],
+            if (_isAdmin) ...[
+              const SizedBox(height: 16),
+              _SectionCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      'Link another family',
+                      'Link families',
                       style: AppTheme.body(weight: FontWeight.w800),
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Search by family name or mobile to merge trees.',
-                      style: AppTheme.body(size: 12, color: AppTheme.muted),
+                      'Search a family name, a relative\'s email, or their 10-digit mobile number.',
+                      style: AppTheme.body(size: 11, color: AppTheme.muted),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
                     Row(
                       children: [
                         Expanded(
                           child: TextField(
                             controller: _linkQuery,
                             decoration: const InputDecoration(
-                              hintText: 'Family name or mobile',
+                              hintText: 'Family name, email, or mobile',
                             ),
                           ),
                         ),
@@ -732,45 +801,41 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
                     ),
                     ..._linkResults.map((family) {
                       final id = (family['id'] ?? '').toString();
-                      return Card(
-                        margin: const EdgeInsets.only(top: 8),
-                        child: Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                family['name']?.toString() ?? 'Family',
-                                style:
-                                    AppTheme.body(weight: FontWeight.w800),
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              family['name']?.toString() ?? 'Family',
+                              style: AppTheme.body(weight: FontWeight.w800),
+                            ),
+                            Text(
+                              '${family['memberCount'] ?? ''} people',
+                              style: AppTheme.body(
+                                size: 11,
+                                color: AppTheme.muted,
                               ),
-                              Text(
-                                '${family['memberCount'] ?? ''} people',
-                                style: AppTheme.body(
-                                  size: 11,
-                                  color: AppTheme.muted,
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              children: [
+                                OutlinedButton(
+                                  onPressed: _linkBusy
+                                      ? null
+                                      : () => _requestLink(id, 'mine'),
+                                  child: const Text('Join their tree'),
                                 ),
-                              ),
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                children: [
-                                  OutlinedButton(
-                                    onPressed: _linkBusy
-                                        ? null
-                                        : () => _requestLink(id, 'mine'),
-                                    child: const Text('Join their tree'),
-                                  ),
-                                  FilledButton(
-                                    onPressed: _linkBusy
-                                        ? null
-                                        : () => _requestLink(id, 'theirs'),
-                                    child: const Text('Bring them into mine'),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
+                                FilledButton(
+                                  onPressed: _linkBusy
+                                      ? null
+                                      : () => _requestLink(id, 'theirs'),
+                                  child: const Text('Bring them into mine'),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       );
                     }),
@@ -825,8 +890,48 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
                       );
                     }),
                   ],
-                  if (_myInvites.isNotEmpty) ...[
-                    const SizedBox(height: 14),
+                ),
+              ),
+            ],
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: _StatCard(
+                    label: 'Active',
+                    value: '$activeCount',
+                    icon: Icons.groups,
+                    iconColor: AppTheme.emerald600,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _StatCard(
+                    label: 'Invites',
+                    value: '${_pendingInvites.length}',
+                    icon: Icons.mail_outline,
+                    iconColor: const Color(0xFFF59E0B),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _StatCard(
+                    label: 'Join requests',
+                    value: '${_joinRequests.length}',
+                    icon: Icons.person_add_alt_1_outlined,
+                    iconColor: const Color(0xFF0284C7),
+                  ),
+                ),
+              ],
+            ),
+            if (_myInvites.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              _SectionCard(
+                color: AppTheme.amber50,
+                borderColor: AppTheme.amber200,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
                       'Invitations for you',
                       style: AppTheme.body(weight: FontWeight.w800),
@@ -834,14 +939,8 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
                     const SizedBox(height: 8),
                     ..._myInvites.map((inv) {
                       final id = (inv['id'] ?? '').toString();
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: AppTheme.amber50,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: AppTheme.amber200),
-                        ),
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -875,203 +974,345 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
                       );
                     }),
                   ],
-                  if (_joinRequests.isNotEmpty) ...[
-                    const SizedBox(height: 14),
-                    Text(
-                      'Join requests',
-                      style: AppTheme.body(weight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 8),
-                    ..._joinRequests.map((r) {
-                      final id = (r['id'] ?? '').toString();
-                      final familyId =
-                          context.read<FamilySessionProvider>().familyId!;
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.fromLTRB(14, 12, 10, 10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFFFBEB),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppTheme.amber200),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              r['name']?.toString() ?? 'Request',
-                              style: AppTheme.body(weight: FontWeight.w800),
-                            ),
-                            Text(
-                              '${r['email'] ?? ''} ${r['phone'] ?? ''}'.trim(),
-                              style: AppTheme.body(
-                                size: 12,
-                                color: AppTheme.muted,
-                              ),
-                            ),
-                            Row(
-                              children: [
-                                TextButton.icon(
-                                  onPressed: () async {
-                                    await context
-                                        .read<FamilyApiService>()
-                                        .approveFamilyJoinRequest(
-                                            familyId, id);
-                                    _load();
-                                  },
-                                  icon: const Icon(
-                                    Icons.check,
-                                    color: Colors.green,
-                                    size: 18,
-                                  ),
-                                  label: const Text('Approve'),
-                                ),
-                                TextButton.icon(
-                                  onPressed: () async {
-                                    await context
-                                        .read<FamilyApiService>()
-                                        .rejectFamilyJoinRequest(
-                                            familyId, id);
-                                    _load();
-                                  },
-                                  icon: const Icon(
-                                    Icons.close,
-                                    color: Colors.red,
-                                    size: 18,
-                                  ),
-                                  label: const Text('Reject'),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                  ],
-                  if (_pendingInvites.isNotEmpty) ...[
-                    const SizedBox(height: 14),
-                    Text(
-                      'Pending invitations',
-                      style: AppTheme.body(weight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 8),
-                    ..._pendingInvites.map((inv) {
-                      final id = (inv['id'] ?? '').toString();
-                      return Card(
-                        child: ListTile(
-                          title: Text(inv['name']?.toString() ?? 'Invite'),
-                          subtitle: Text(
-                            [
-                              inv['relationship'],
-                              inv['phone'],
-                              inv['email'],
-                            ]
-                                .where((e) =>
-                                    e != null && e.toString().isNotEmpty)
-                                .join(' · '),
-                          ),
-                          trailing: Wrap(
+                ),
+              ),
+            ],
+            const SizedBox(height: 14),
+            if (_loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 48),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else ...[
+              _SectionCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              IconButton(
-                                tooltip: 'Resend OTP',
-                                onPressed: () async {
-                                  await context
-                                      .read<FamilyApiService>()
-                                      .resendInviteOtp(id);
-                                  if (!mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('OTP resent'),
-                                    ),
-                                  );
-                                },
-                                icon: const Icon(Icons.sms_outlined),
+                              Text(
+                                'Active members',
+                                style: AppTheme.body(weight: FontWeight.w800),
                               ),
-                              IconButton(
-                                tooltip: 'Cancel',
-                                onPressed: () async {
-                                  await context
-                                      .read<FamilyApiService>()
-                                      .cancelInvitation(id);
-                                  _load();
-                                },
-                                icon: const Icon(Icons.close),
+                              Text(
+                                '${_filtered.length} people · search & preview',
+                                style: AppTheme.body(
+                                  size: 11,
+                                  color: AppTheme.muted,
+                                ),
                               ),
                             ],
                           ),
                         ),
-                      );
-                    }),
-                  ],
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'People',
-                          style: AppTheme.body(weight: FontWeight.w800),
-                        ),
-                      ),
-                      Text(
-                        '${_filtered.length}',
-                        style: AppTheme.body(
-                          size: 12,
-                          weight: FontWeight.w700,
-                          color: AppTheme.muted,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ..._filtered.map(
-                    (m) => _MemberCard(
-                      member: m,
-                      onTap: () => _openPreview(m),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 88),
-                ],
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _search,
+                      onChanged: (v) => setState(() => _query = v),
+                      decoration: InputDecoration(
+                        hintText: 'Search members…',
+                        prefixIcon: const Icon(Icons.search),
+                        filled: true,
+                        fillColor: AppTheme.shellBg,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: AppTheme.borderSoft),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: AppTheme.borderSoft),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (_filtered.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 28),
+                        child: Center(
+                          child: Text(
+                            _members.isEmpty
+                                ? 'No members yet. Tap Add to invite someone.'
+                                : 'No members match your search.',
+                            textAlign: TextAlign.center,
+                            style: AppTheme.body(color: AppTheme.muted),
+                          ),
+                        ),
+                      )
+                    else
+                      ..._filtered.map(
+                        (m) => _MemberCard(
+                          member: m,
+                          relation: _relationLabel(m),
+                          onTap: () => _openPreview(m),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-    );
-  }
-}
-
-class _StatChip extends StatelessWidget {
-  const _StatChip({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Text(
-        '$label · $value',
-        style: TextStyle(
-          fontWeight: FontWeight.w800,
-          fontSize: 12,
-          color: color,
+              const SizedBox(height: 14),
+              _SectionCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Join requests',
+                      style: AppTheme.body(weight: FontWeight.w800),
+                    ),
+                    Text(
+                      'People asking to join',
+                      style: AppTheme.body(size: 11, color: AppTheme.muted),
+                    ),
+                    const SizedBox(height: 8),
+                    if (_joinRequests.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        child: Text(
+                          'No pending join requests.',
+                          style: AppTheme.body(color: AppTheme.muted, size: 13),
+                        ),
+                      )
+                    else
+                      ..._joinRequests.map((r) {
+                        final id = (r['id'] ?? '').toString();
+                        final familyId =
+                            context.read<FamilySessionProvider>().familyId!;
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.fromLTRB(12, 10, 8, 8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.shellBg,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppTheme.borderSoft),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                r['name']?.toString() ?? 'Request',
+                                style: AppTheme.body(weight: FontWeight.w800),
+                              ),
+                              Text(
+                                '${r['email'] ?? ''} ${r['phone'] ?? ''}'
+                                    .trim(),
+                                style: AppTheme.body(
+                                  size: 12,
+                                  color: AppTheme.muted,
+                                ),
+                              ),
+                              Row(
+                                children: [
+                                  TextButton.icon(
+                                    onPressed: () async {
+                                      await context
+                                          .read<FamilyApiService>()
+                                          .approveFamilyJoinRequest(
+                                              familyId, id);
+                                      _load();
+                                    },
+                                    icon: const Icon(
+                                      Icons.check,
+                                      color: Colors.green,
+                                      size: 18,
+                                    ),
+                                    label: const Text('Approve'),
+                                  ),
+                                  TextButton.icon(
+                                    onPressed: () async {
+                                      await context
+                                          .read<FamilyApiService>()
+                                          .rejectFamilyJoinRequest(
+                                              familyId, id);
+                                      _load();
+                                    },
+                                    icon: const Icon(
+                                      Icons.close,
+                                      color: Colors.red,
+                                      size: 18,
+                                    ),
+                                    label: const Text('Reject'),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+              _SectionCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Pending invitations',
+                      style: AppTheme.body(weight: FontWeight.w800),
+                    ),
+                    Text(
+                      'Waiting for OTP / accept',
+                      style: AppTheme.body(size: 11, color: AppTheme.muted),
+                    ),
+                    const SizedBox(height: 8),
+                    if (_pendingInvites.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        child: Text(
+                          'No pending invitations.',
+                          style: AppTheme.body(color: AppTheme.muted, size: 13),
+                        ),
+                      )
+                    else
+                      ..._pendingInvites.map((inv) {
+                        final id = (inv['id'] ?? '').toString();
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            title: Text(inv['name']?.toString() ?? 'Invite'),
+                            subtitle: Text(
+                              [
+                                inv['relationship'],
+                                inv['phone'],
+                                inv['email'],
+                              ]
+                                  .where((e) =>
+                                      e != null && e.toString().isNotEmpty)
+                                  .join(' · '),
+                            ),
+                            trailing: Wrap(
+                              children: [
+                                IconButton(
+                                  tooltip: 'Resend OTP',
+                                  onPressed: () async {
+                                    await context
+                                        .read<FamilyApiService>()
+                                        .resendInviteOtp(id);
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('OTP resent'),
+                                      ),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.sms_outlined),
+                                ),
+                                IconButton(
+                                  tooltip: 'Cancel',
+                                  onPressed: () async {
+                                    await context
+                                        .read<FamilyApiService>()
+                                        .cancelInvitation(id);
+                                    _load();
+                                  },
+                                  icon: const Icon(Icons.close),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 88),
+          ],
         ),
       ),
     );
   }
 }
 
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({
+    required this.child,
+    this.color,
+    this.borderColor,
+  });
+
+  final Widget child;
+  final Color? color;
+  final Color? borderColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color ?? AppTheme.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor ?? AppTheme.borderSoft),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  const _StatCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.iconColor,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.borderSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: AppTheme.body(
+              size: 10,
+              weight: FontWeight.w700,
+              color: AppTheme.muted,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Text(
+                value,
+                style: AppTheme.display(size: 22),
+              ),
+              const SizedBox(width: 6),
+              Icon(icon, size: 16, color: iconColor),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MemberCard extends StatelessWidget {
-  const _MemberCard({required this.member, required this.onTap});
+  const _MemberCard({
+    required this.member,
+    required this.relation,
+    required this.onTap,
+  });
 
   final FamilyMember member;
+  final String relation;
   final VoidCallback onTap;
 
   @override
@@ -1079,28 +1320,32 @@ class _MemberCard extends StatelessWidget {
     final url = mediaUrl(member.avatar);
     final phone = (member.phone ?? '').trim();
     final email = member.displayEmail;
-    final rel = member.relationship ?? 'Family';
+    final location = (member.location ?? '').trim();
     final status = (member.status ?? 'ACTIVE').toUpperCase();
+    final emailStatus = (member.emailStatus ?? '').trim();
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Material(
-        color: AppTheme.card,
-        borderRadius: BorderRadius.circular(16),
+        color: AppTheme.shellBg,
+        borderRadius: BorderRadius.circular(14),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           child: Ink(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(color: AppTheme.borderSoft),
             ),
             padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 CircleAvatar(
-                  radius: 24,
-                  backgroundColor: AppTheme.forest.withValues(alpha: 0.12),
+                  radius: 22,
+                  backgroundColor: member.isAlive
+                      ? AppTheme.emerald100
+                      : const Color(0xFFFEE2E2),
                   backgroundImage: url != null ? NetworkImage(url) : null,
                   child: url == null
                       ? Text(
@@ -1109,7 +1354,9 @@ class _MemberCard extends StatelessWidget {
                               : '?',
                           style: AppTheme.body(
                             weight: FontWeight.w800,
-                            color: AppTheme.forest,
+                            color: member.isAlive
+                                ? const Color(0xFF065F46)
+                                : const Color(0xFFB91C1C),
                           ),
                         )
                       : null,
@@ -1133,71 +1380,70 @@ class _MemberCard extends StatelessWidget {
                             ),
                           ),
                           const Icon(
-                            Icons.chevron_right,
+                            Icons.info_outline,
+                            size: 18,
                             color: Color(0xFF94A3B8),
                           ),
                         ],
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        '$rel · $status',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        relation,
                         style: AppTheme.body(
                           size: 12,
-                          color: member.isMembershipActive
-                              ? AppTheme.muted
-                              : const Color(0xFFB45309),
-                          weight: FontWeight.w600,
+                          weight: FontWeight.w700,
+                          color: AppTheme.forest,
                         ),
                       ),
                       const SizedBox(height: 4),
+                      Text(
+                        [
+                          if (location.isNotEmpty) location else '—',
+                          if (phone.isNotEmpty) phone,
+                          if (email.isNotEmpty) email,
+                        ].join(' · '),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTheme.body(
+                          size: 11,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
                       Wrap(
                         spacing: 4,
                         runSpacing: 4,
                         children: [
-                          if (member.isOwner)
+                          _MiniBadge(
+                            label: status,
+                            color: member.isMembershipActive
+                                ? const Color(0xFF059669)
+                                : const Color(0xFFB45309),
+                          ),
+                          if (emailStatus.isNotEmpty)
                             _MiniBadge(
+                              label: emailStatus,
+                              color: emailStatus.toLowerCase().contains('verif')
+                                  ? const Color(0xFF059669)
+                                  : const Color(0xFFD97706),
+                            ),
+                          if (member.isOwner)
+                            const _MiniBadge(
                               label: 'Owner',
-                              color: const Color(0xFF7C3AED),
+                              color: Color(0xFF7C3AED),
                             )
                           else if (member.isAdmin)
-                            _MiniBadge(
+                            const _MiniBadge(
                               label: 'Admin',
-                              color: const Color(0xFF0369A1),
+                              color: Color(0xFF0369A1),
                             ),
                           if (!member.isAlive)
-                            _MiniBadge(
+                            const _MiniBadge(
                               label: 'Memorial',
-                              color: const Color(0xFFBE123C),
-                            ),
-                          if (!member.isMembershipActive)
-                            _MiniBadge(
-                              label: 'Inactive',
-                              color: const Color(0xFFB45309),
-                            ),
-                          if (member.invitePending)
-                            _MiniBadge(
-                              label: 'Pending',
-                              color: const Color(0xFFC2410C),
+                              color: Color(0xFFBE123C),
                             ),
                         ],
                       ),
-                      if (phone.isNotEmpty || email.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          [
-                            if (phone.isNotEmpty) phone,
-                            if (email.isNotEmpty) email,
-                          ].join(' · '),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTheme.body(
-                            size: 11,
-                            color: const Color(0xFF64748B),
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),

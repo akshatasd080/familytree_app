@@ -6,6 +6,7 @@ import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
 import '../../data/family_api_service.dart';
 import '../../data/models/family_models.dart';
+import 'state_city_select.dart';
 
 const _relationshipChoices = <String>[
   'Father',
@@ -662,8 +663,8 @@ class _MemberEditSheet extends StatefulWidget {
 class _MemberEditSheetState extends State<_MemberEditSheet> {
   late final TextEditingController _name;
   late final TextEditingController _phone;
-  late final TextEditingController _location;
   late final TextEditingController _notes;
+  late String _location;
   late String _relationship;
   bool _saving = false;
   String? _error;
@@ -680,9 +681,7 @@ class _MemberEditSheetState extends State<_MemberEditSheet> {
     _phone = TextEditingController(
       text: phone.length > 10 ? phone.substring(phone.length - 10) : phone,
     );
-    _location = TextEditingController(
-      text: (m.location ?? info['location'] ?? '').toString(),
-    );
+    _location = (m.location ?? info['location'] ?? '').toString();
     _notes = TextEditingController(text: (info['notes'] ?? '').toString());
     final rel = (m.relationship ?? '').trim();
     if (m.isSiteCreator) {
@@ -699,7 +698,6 @@ class _MemberEditSheetState extends State<_MemberEditSheet> {
   void dispose() {
     _name.dispose();
     _phone.dispose();
-    _location.dispose();
     _notes.dispose();
     super.dispose();
   }
@@ -733,7 +731,7 @@ class _MemberEditSheetState extends State<_MemberEditSheet> {
     try {
       final payload = <String, dynamic>{
         'name': _name.text.trim(),
-        'location': _location.text.trim(),
+        'location': _location.trim(),
         'notes': _notes.text.trim(),
       };
       if (phone.isNotEmpty) payload['phone'] = phone;
@@ -828,9 +826,9 @@ class _MemberEditSheetState extends State<_MemberEditSheet> {
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 10),
-            TextField(
-              controller: _location,
-              decoration: const InputDecoration(labelText: 'Location'),
+            StateCitySelect(
+              value: _location,
+              onChanged: (v) => setState(() => _location = v),
             ),
             const SizedBox(height: 10),
             TextField(

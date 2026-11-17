@@ -369,4 +369,46 @@ class FamilyApiService {
     String requestId,
   ) =>
       _api.post('/families/$familyId/join-requests/$requestId/reject');
+
+  // --- family notices (important messages) ---
+  Future<Response> getFamilyNoticesUnreadCount() =>
+      _api.get('/families/notices/unread-count');
+
+  Future<Response> listFamilyNotices(String familyId) =>
+      _api.get('/families/$familyId/notices');
+
+  Future<Response> createFamilyNotice(
+    String familyId, {
+    required String body,
+    String? location,
+    String? imagePath,
+  }) {
+    final map = <String, dynamic>{
+      'body': body,
+      if (location != null && location.trim().isNotEmpty)
+        'location': location.trim(),
+      if (imagePath != null && imagePath.isNotEmpty)
+        'image': MultipartFile.fromFileSync(imagePath),
+    };
+    final form = FormData.fromMap(map);
+    return _api.post(
+      '/families/$familyId/notices',
+      data: form,
+      options: Options(contentType: 'multipart/form-data'),
+    );
+  }
+
+  Future<Response> markFamilyNoticesRead(
+    String familyId, {
+    List<String>? noticeIds,
+  }) =>
+      _api.post(
+        '/families/$familyId/notices/read',
+        data: noticeIds == null || noticeIds.isEmpty
+            ? <String, dynamic>{}
+            : {'noticeIds': noticeIds},
+      );
+
+  Future<Response> deleteFamilyNotice(String familyId, String noticeId) =>
+      _api.delete('/families/$familyId/notices/$noticeId');
 }

@@ -60,8 +60,9 @@ class FtPage extends StatelessWidget {
           Divider(height: 1, color: AppTheme.borderSoft),
           Expanded(
             child: Stack(
+              fit: StackFit.expand,
               children: [
-                Positioned.fill(child: body),
+                body,
                 if (floatingActionButton != null)
                   Positioned(
                     right: 16,

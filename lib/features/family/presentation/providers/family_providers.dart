@@ -53,3 +53,35 @@ class FamilySessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+/// Unread important-message count for sidebar badge (web parity).
+class FamilyNoticesUnreadProvider extends ChangeNotifier {
+  FamilyNoticesUnreadProvider(this._api);
+
+  final FamilyApiService _api;
+  int unreadCount = 0;
+  bool loading = false;
+
+  Future<void> refresh() async {
+    loading = true;
+    try {
+      final res = await _api.getFamilyNoticesUnreadCount();
+      final data = res.data;
+      if (data is Map && data['unreadCount'] != null) {
+        unreadCount = int.tryParse(data['unreadCount'].toString()) ?? 0;
+      } else {
+        unreadCount = 0;
+      }
+    } catch (_) {
+      // Keep last known count on transient errors.
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
+  }
+
+  void clearLocal() {
+    unreadCount = 0;
+    notifyListeners();
+  }
+}

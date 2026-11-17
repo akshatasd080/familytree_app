@@ -6,6 +6,8 @@ class FamilySummary {
     this.isActive = true,
     this.relationship,
     this.role,
+    this.isAdmin = false,
+    this.isCreator = false,
   });
 
   final String id;
@@ -14,18 +16,30 @@ class FamilySummary {
   final bool isActive;
   final String? relationship;
   final String? role;
+  final bool isAdmin;
+  final bool isCreator;
 
   factory FamilySummary.fromJson(Map<String, dynamic> json) {
     final family = json['family'] is Map
         ? Map<String, dynamic>.from(json['family'] as Map)
         : json;
+    final rel =
+        (json['relationship'] ?? family['relationship'])?.toString() ?? '';
+    final isSiteCreator =
+        rel.toLowerCase().replaceAll(RegExp(r'[\s_-]+'), '') == 'sitecreator';
     return FamilySummary(
       id: (family['id'] ?? json['familyId'] ?? '').toString(),
       name: (family['name'] ?? json['familyName'] ?? 'Family').toString(),
       avatar: (family['avatar'] ?? json['avatar'])?.toString(),
       isActive: family['is_active'] != false && family['isActive'] != false,
-      relationship: (json['relationship'] ?? family['relationship'])?.toString(),
+      relationship: rel.isEmpty ? null : rel,
       role: (json['role'] ?? family['role'])?.toString(),
+      isAdmin: json['isAdmin'] == true ||
+          family['isAdmin'] == true ||
+          isSiteCreator,
+      isCreator: json['isCreator'] == true ||
+          family['isCreator'] == true ||
+          isSiteCreator,
     );
   }
 }

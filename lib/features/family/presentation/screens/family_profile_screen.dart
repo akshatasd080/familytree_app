@@ -8,6 +8,7 @@ import '../../../../core/utils/media_url.dart';
 import '../../../../core/widgets/ft_page.dart';
 import '../../../../core/widgets/responsive.dart';
 import '../../data/family_api_service.dart';
+import '../widgets/state_city_select.dart';
 
 const _bloodGroups = [
   'A+',
@@ -347,12 +348,9 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  TextField(
-                    controller: _location,
-                    decoration: const InputDecoration(
-                      labelText: 'Location',
-                      hintText: 'City, State',
-                    ),
+                  StateCitySelect(
+                    value: _location.text,
+                    onChanged: (v) => setState(() => _location.text = v),
                   ),
                   const SizedBox(height: 10),
                   Row(

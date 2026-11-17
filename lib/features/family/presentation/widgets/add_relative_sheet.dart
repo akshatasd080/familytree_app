@@ -8,6 +8,7 @@ import '../../../../app/theme.dart';
 import '../../data/family_api_service.dart';
 import '../../data/models/family_models.dart';
 import '../../domain/ego_tree.dart';
+import 'state_city_select.dart';
 
 const relationshipOptions = <(String, String)>[
   ('Father', 'male'),
@@ -116,6 +117,7 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
   late String _gender;
   late FamilyMember _relatedTo;
   String _dob = '';
+  String _location = '';
   bool _isAlive = true;
   bool _withMobile = true;
   String? _existingMemberId;
@@ -275,6 +277,7 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
             'isAlive': false,
             if (_gender.isNotEmpty) 'gender': _gender,
             if (_dob.isNotEmpty) 'dateOfBirth': _dob,
+            if (_location.trim().isNotEmpty) 'location': _location.trim(),
             if (avatar != null) 'avatar': avatar,
             if (avatar != null) 'profileImage': avatar,
             'relatedTo': anchorId,
@@ -315,6 +318,7 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
             'notes': _notes.text.trim().isEmpty ? null : _notes.text.trim(),
             if (_gender.isNotEmpty) 'gender': _gender,
             'dateOfBirth': _dob,
+            if (_location.trim().isNotEmpty) 'location': _location.trim(),
             if (avatar != null) 'avatar': avatar,
             if (avatar != null) 'profileImage': avatar,
             'relatedTo': anchorId,
@@ -359,6 +363,7 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
             if (_notes.text.trim().isNotEmpty) 'notes': _notes.text.trim(),
             if (_gender.isNotEmpty) 'gender': _gender,
             if (_dob.isNotEmpty) 'dateOfBirth': _dob,
+            if (_location.trim().isNotEmpty) 'location': _location.trim(),
             if (avatar != null) 'avatar': avatar,
             if (avatar != null) 'profileImage': avatar,
             'relatedTo': anchorId,
@@ -697,6 +702,11 @@ class _AddRelativeSheetState extends State<_AddRelativeSheet> {
                   onEditingComplete: _checkEmail,
                 ),
               ],
+              const SizedBox(height: 8),
+              StateCitySelect(
+                value: _location,
+                onChanged: (v) => setState(() => _location = v),
+              ),
               const SizedBox(height: 8),
               TextField(
                 controller: _notes,

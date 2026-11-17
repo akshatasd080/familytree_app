@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -7,8 +9,8 @@ import '../core/widgets/ft_widgets.dart';
 import '../features/auth/presentation/providers/auth_providers.dart';
 import '../features/auth/presentation/widgets/set_initial_password_dialog.dart';
 import '../features/family/presentation/providers/family_providers.dart';
+import '../features/family/presentation/widgets/family_notice_popup.dart';
 import '../features/settings/presentation/providers/theme_settings_provider.dart';
-import 'router.dart';
 import 'theme.dart';
 
 class AppShell extends StatefulWidget {
@@ -22,6 +24,7 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  Timer? _unreadTimer;
 
   @override
   void initState() {
@@ -29,6 +32,7 @@ class _AppShellState extends State<AppShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       context.read<FamilySessionProvider>().loadMine();
+      context.read<FamilyNoticesUnreadProvider>().refresh();
       final auth = context.read<AuthProvider>();
       if (auth.user?.mustChangePassword == true) {
         showDialog(
@@ -37,15 +41,30 @@ class _AppShellState extends State<AppShell> {
           builder: (_) => const SetInitialPasswordDialog(),
         );
       }
+      _unreadTimer = Timer.periodic(
+        const Duration(seconds: 30),
+        (_) {
+          if (!mounted) return;
+          context.read<FamilyNoticesUnreadProvider>().refresh();
+        },
+      );
     });
+  }
+
+  @override
+  void dispose() {
+    _unreadTimer?.cancel();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final family = context.watch<FamilySessionProvider>();
+    final noticesUnread = context.watch<FamilyNoticesUnreadProvider>();
     context.watch<ThemeSettingsProvider>();
     final wide = MediaQuery.sizeOf(context).width >= 840;
+    final mustChange = auth.user?.mustChangePassword == true;
 
     return PopScope(
       canPop: false,
@@ -72,6 +91,7 @@ class _AppShellState extends State<AppShell> {
                 familyName: family.current?.name ?? 'Family Tree',
                 userName: auth.user?.name ?? '',
                 showAdminFamilies: auth.hasPermission('family.read'),
+                messagesUnread: noticesUnread.unreadCount,
                 onLogout: () async {
                   await auth.logout();
                   if (context.mounted) context.go('/login');
@@ -89,6 +109,7 @@ class _AppShellState extends State<AppShell> {
                     familyName: family.current?.name ?? 'Family Tree',
                     userName: auth.user?.name ?? '',
                     showAdminFamilies: auth.hasPermission('family.read'),
+                    messagesUnread: noticesUnread.unreadCount,
                     permanent: true,
                     onLogout: () async {
                       await auth.logout();
@@ -98,7 +119,15 @@ class _AppShellState extends State<AppShell> {
                 ),
               ),
             if (wide) VerticalDivider(width: 1, color: AppTheme.borderSoft),
-            Expanded(child: widget.child),
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  widget.child,
+                  if (!mustChange) const FamilyNoticePopup(),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -112,6 +141,7 @@ class _AppDrawer extends StatelessWidget {
     required this.userName,
     required this.showAdminFamilies,
     required this.onLogout,
+    this.messagesUnread = 0,
     this.permanent = false,
   });
 
@@ -119,6 +149,7 @@ class _AppDrawer extends StatelessWidget {
   final String userName;
   final bool showAdminFamilies;
   final VoidCallback onLogout;
+  final int messagesUnread;
   final bool permanent;
 
   @override
@@ -142,6 +173,13 @@ class _AppDrawer extends StatelessWidget {
               _item(context, Icons.groups, 'Members', '/family/members'),
               _item(context, Icons.account_tree, 'Tree', '/family/tree'),
               _item(context, Icons.photo_library, 'Media', '/family/media'),
+              _item(
+                context,
+                Icons.forum_outlined,
+                'Messages',
+                '/family/messages',
+                badge: messagesUnread,
+              ),
               _item(context, Icons.person, 'Profile', '/family/profile'),
               _item(context, Icons.map_outlined, 'Map', '/family/map'),
               _item(context, Icons.event, 'Events', '/family/events'),
@@ -202,8 +240,9 @@ class _AppDrawer extends StatelessWidget {
     BuildContext context,
     IconData icon,
     String label,
-    String path,
-  ) {
+    String path, {
+    int badge = 0,
+  }) {
     final loc = GoRouterState.of(context).matchedLocation;
     final active =
         loc == path || (path != '/dashboard' && loc.startsWith(path));
@@ -229,6 +268,16 @@ class _AppDrawer extends StatelessWidget {
             color: active ? Colors.white : AppTheme.inkSoft,
           ),
         ),
+        trailing: badge > 0
+            ? Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: active ? Colors.white : AppTheme.emerald600,
+                  shape: BoxShape.circle,
+                ),
+              )
+            : null,
         onTap: () {
           // Capture router before closing the drawer — using drawer context
           // after pop can leave navigation stuck on the previous tab.
