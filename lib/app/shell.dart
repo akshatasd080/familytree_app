@@ -62,9 +62,11 @@ class _AppShellState extends State<AppShell> {
     final auth = context.watch<AuthProvider>();
     final family = context.watch<FamilySessionProvider>();
     final noticesUnread = context.watch<FamilyNoticesUnreadProvider>();
-    context.watch<ThemeSettingsProvider>();
+    final themeSettings = context.watch<ThemeSettingsProvider>();
     final wide = MediaQuery.sizeOf(context).width >= 840;
     final mustChange = auth.user?.mustChangePassword == true;
+    final themeKey =
+        'shell-theme-${themeSettings.isDark}-${themeSettings.accent.toARGB32()}';
 
     return PopScope(
       canPop: false,
@@ -123,7 +125,12 @@ class _AppShellState extends State<AppShell> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  widget.child,
+                  // Rebuild route body when light/dark or accent changes —
+                  // Stateful screens otherwise keep stale AppTheme colors.
+                  KeyedSubtree(
+                    key: ValueKey(themeKey),
+                    child: widget.child,
+                  ),
                   if (!mustChange) const FamilyNoticePopup(),
                 ],
               ),

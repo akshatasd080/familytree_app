@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../app/theme.dart';
+import '../../features/settings/presentation/providers/theme_settings_provider.dart';
 
 /// Page chrome for routes inside [AppShell] — no nested Scaffold,
 /// so bottom-nav / FAB / body never fight each other.
@@ -22,6 +24,8 @@ class FtPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Rebuild chrome when theme toggles (uses AppTheme static tokens).
+    context.watch<ThemeSettingsProvider>();
     final wide = MediaQuery.sizeOf(context).width >= 840;
     final canOpenDrawer = !wide && Scaffold.maybeOf(context)?.hasDrawer == true;
 

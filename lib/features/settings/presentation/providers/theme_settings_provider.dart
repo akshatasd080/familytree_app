@@ -46,8 +46,12 @@ class ThemeSettingsProvider extends ChangeNotifier {
     _isDark = value;
     AppTheme.apply(isDark: _isDark, accent: _accent);
     notifyListeners();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_kDark, _isDark);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_kDark, _isDark);
+    } catch (_) {
+      // Theme still applied in-memory even if persist fails.
+    }
   }
 
   Future<void> setAccent(Color color) async {

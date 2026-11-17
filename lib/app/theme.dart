@@ -83,14 +83,48 @@ class AppTheme {
   static ThemeData get light => _build(Brightness.light);
   static ThemeData get dark => _build(Brightness.dark);
 
+  /// Colors for a given brightness — never read [_isDark] here so light/dark
+  /// ThemeData stay correct even when the opposite mode is currently selected.
+  static Color _inkFor(bool dark) =>
+      dark ? const Color(0xFFF1F5F3) : const Color(0xFF1F2A24);
+  static Color _inkSoftFor(bool dark) =>
+      dark ? const Color(0xFFE2E8E4) : const Color(0xFF2A1F14);
+  static Color _mutedFor(bool dark) =>
+      dark ? const Color(0xFF9CA8A2) : const Color(0xFF6B726E);
+  static Color _borderFor(bool dark) =>
+      dark ? const Color(0xFF3A4540) : const Color(0xFFD9D2C8);
+  static Color _borderSoftFor(bool dark) =>
+      dark ? const Color(0xFF2F3A35) : const Color(0xFFE5DFD6);
+  static Color _canvasFor(bool dark) =>
+      dark ? const Color(0xFF121816) : const Color(0xFFF7F4EF);
+  static Color _creamFor(bool dark) =>
+      dark ? const Color(0xFF1A221E) : const Color(0xFFF4EFE6);
+  static Color _shellBgFor(bool dark) =>
+      dark ? const Color(0xFF0E1411) : const Color(0xFFF4F6F5);
+  static Color _cardFor(bool dark) =>
+      dark ? const Color(0xFF1A221E) : Colors.white;
+  static Color _drawerBgFor(bool dark) =>
+      dark ? const Color(0xFF15201B) : Colors.white;
+
   static ThemeData _build(Brightness brightness) {
     final dark = brightness == Brightness.dark;
-    // Keep button/chip label text black on brand-colored surfaces (app-wide).
+    final inkC = _inkFor(dark);
+    final inkSoftC = _inkSoftFor(dark);
+    final mutedC = _mutedFor(dark);
+    final borderC = _borderFor(dark);
+    final borderSoftC = _borderSoftFor(dark);
+    final canvasC = _canvasFor(dark);
+    final creamC = _creamFor(dark);
+    final shellC = _shellBgFor(dark);
+    final cardC = _cardFor(dark);
+    final drawerC = _drawerBgFor(dark);
+
+    // Keep filled/chip labels black on brand-colored surfaces (app-wide).
     final scheme = ColorScheme.fromSeed(
       seedColor: _accent,
       primary: _accent,
       brightness: brightness,
-      surface: dark ? const Color(0xFF121816) : canvas,
+      surface: dark ? const Color(0xFF121816) : canvasC,
     ).copyWith(
       onPrimary: Colors.black,
       onSecondary: Colors.black,
@@ -104,48 +138,48 @@ class AppTheme {
       useMaterial3: true,
       brightness: brightness,
       colorScheme: scheme,
-      scaffoldBackgroundColor: dark ? shellBg : canvas,
+      scaffoldBackgroundColor: shellC,
     );
     return base.copyWith(
       appBarTheme: AppBarTheme(
-        backgroundColor: dark ? drawerBg : Colors.white,
-        foregroundColor: ink,
+        backgroundColor: drawerC,
+        foregroundColor: inkC,
         elevation: 0,
         centerTitle: false,
         titleTextStyle: GoogleFonts.fraunces(
           fontSize: 18,
           fontWeight: FontWeight.w700,
-          color: ink,
+          color: inkC,
         ),
       ),
       cardTheme: CardThemeData(
-        color: card,
+        color: cardC,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: borderSoft),
+          side: BorderSide(color: borderSoftC),
         ),
       ),
-      drawerTheme: DrawerThemeData(backgroundColor: drawerBg),
-      dividerColor: borderSoft,
+      drawerTheme: DrawerThemeData(backgroundColor: drawerC),
+      dividerColor: borderSoftC,
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: card,
-        hintStyle: GoogleFonts.outfit(color: muted),
+        fillColor: cardC,
+        hintStyle: GoogleFonts.outfit(color: mutedC),
         labelStyle: GoogleFonts.outfit(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: inkSoft,
+          color: inkSoftC,
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: border),
+          borderSide: BorderSide(color: borderC),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: border),
+          borderSide: BorderSide(color: borderC),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
@@ -180,23 +214,23 @@ class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: Colors.black,
+          foregroundColor: inkC,
           textStyle: GoogleFonts.outfit(
             fontWeight: FontWeight.w700,
-            color: Colors.black,
+            color: inkC,
           ),
-          iconColor: Colors.black,
+          iconColor: inkC,
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: Colors.black,
-          side: BorderSide(color: border),
+          foregroundColor: inkC,
+          side: BorderSide(color: borderC),
           textStyle: GoogleFonts.outfit(
             fontWeight: FontWeight.w600,
-            color: Colors.black,
+            color: inkC,
           ),
-          iconColor: Colors.black,
+          iconColor: inkC,
           minimumSize: const Size.fromHeight(48),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -208,9 +242,9 @@ class AppTheme {
         backgroundColor: _accent,
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: cream,
+        backgroundColor: creamC,
         selectedColor: _accent,
-        disabledColor: cream,
+        disabledColor: creamC,
         secondarySelectedColor: _accent,
         labelStyle: GoogleFonts.outfit(
           fontSize: 12,
@@ -226,14 +260,14 @@ class AppTheme {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: card,
+        backgroundColor: cardC,
         indicatorColor: _accent.withValues(alpha: 0.14),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return GoogleFonts.outfit(
             fontSize: 12,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-            color: selected ? _accent : muted,
+            color: selected ? _accent : mutedC,
           );
         }),
       ),

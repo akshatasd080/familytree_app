@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -57,6 +58,18 @@ class _FamilyTreeAppState extends State<FamilyTreeApp> {
       child: Consumer<ThemeSettingsProvider>(
         builder: (context, theme, _) {
           AppTheme.apply(isDark: theme.isDark, accent: theme.accent);
+          SystemChrome.setSystemUIOverlayStyle(
+            SystemUiOverlayStyle(
+              statusBarColor: Colors.transparent,
+              statusBarIconBrightness:
+                  theme.isDark ? Brightness.light : Brightness.dark,
+              statusBarBrightness:
+                  theme.isDark ? Brightness.dark : Brightness.light,
+              systemNavigationBarColor: AppTheme.shellBg,
+              systemNavigationBarIconBrightness:
+                  theme.isDark ? Brightness.light : Brightness.dark,
+            ),
+          );
           return MaterialApp.router(
             title: 'Family Tree',
             debugShowCheckedModeBanner: false,
