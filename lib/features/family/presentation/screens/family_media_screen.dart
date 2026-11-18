@@ -125,16 +125,86 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen>
     return int.tryParse(v.toString()) ?? 0;
   }
 
+  bool _likedByMe(Map<String, dynamic> item) =>
+      item['likedByMe'] == true || item['liked'] == true;
+
   List _comments(Map<String, dynamic> item) {
     final c = item['comments'];
     return c is List ? c : const [];
   }
+
+  static const _feelingTabs = <(String, String, List<(String, String)>)>[
+    (
+      'feelings',
+      'Feelings',
+      [
+        ('😊', 'happy'),
+        ('🥰', 'loved'),
+        ('😎', 'cool'),
+        ('🤩', 'excited'),
+        ('😌', 'blessed'),
+        ('😇', 'thankful'),
+        ('💪', 'motivated'),
+        ('😴', 'tired'),
+        ('😢', 'sad'),
+        ('😤', 'angry'),
+        ('🤒', 'sick'),
+        ('🤔', 'confused'),
+      ],
+    ),
+    (
+      'activities',
+      'Activities',
+      [
+        ('🎉', 'celebrating'),
+        ('✈️', 'traveling'),
+        ('🍽️', 'eating'),
+        ('☕', 'having coffee'),
+        ('🎬', 'watching'),
+        ('📚', 'reading'),
+        ('🏃', 'exercising'),
+        ('🎮', 'gaming'),
+        ('🛒', 'shopping'),
+        ('🎧', 'listening to music'),
+        ('🧑‍🍳', 'cooking'),
+        ('💤', 'relaxing'),
+      ],
+    ),
+    (
+      'family',
+      'Family',
+      [
+        ('👨‍👩‍👧‍👦', 'with family'),
+        ('❤️', 'grateful for family'),
+        ('🏠', 'at home'),
+        ('🎂', 'birthday vibes'),
+        ('🪔', 'festival mood'),
+        ('👶', 'with kids'),
+        ('👴', 'with elders'),
+        ('🤝', 'reunited'),
+      ],
+    ),
+    (
+      'weather',
+      'Weather',
+      [
+        ('☀️', 'sunny'),
+        ('🌧️', 'rainy'),
+        ('❄️', 'cold'),
+        ('🌤️', 'pleasant'),
+        ('🌪️', 'stormy'),
+        ('🌈', 'after the rain'),
+      ],
+    ),
+  ];
 
   Future<void> _compose() async {
     final familyId = context.read<FamilySessionProvider>().familyId;
     if (familyId == null) return;
     final caption = TextEditingController();
     String? path;
+    (String, String)? feeling; // emoji, label
+    var feelingTab = 0;
     final ok = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -142,74 +212,159 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen>
       showDragHandle: true,
       backgroundColor: AppTheme.canvas,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setLocal) => Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            bottom: MediaQuery.viewInsetsOf(ctx).bottom + 16,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('New post', style: AppTheme.display(size: 20)),
-              const SizedBox(height: 12),
-              InkWell(
-                onTap: () async {
-                  final file = await ImagePicker()
-                      .pickImage(source: ImageSource.gallery, imageQuality: 85);
-                  if (file != null) setLocal(() => path = file.path);
-                },
-                borderRadius: BorderRadius.circular(14),
-                child: Container(
-                  height: 140,
-                  width: double.infinity,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF1F5),
+        builder: (ctx, setLocal) {
+          final canPost = path != null ||
+              caption.text.trim().isNotEmpty ||
+              feeling != null;
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              bottom: MediaQuery.viewInsetsOf(ctx).bottom + 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('New post', style: AppTheme.display(size: 20)),
+                  const SizedBox(height: 12),
+                  InkWell(
+                    onTap: () async {
+                      final file = await ImagePicker().pickImage(
+                        source: ImageSource.gallery,
+                        imageQuality: 85,
+                      );
+                      if (file != null) setLocal(() => path = file.path);
+                    },
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFFBCFE8)),
-                  ),
-                  child: Text(
-                    path == null ? 'Tap to choose photo' : 'Photo selected',
-                    style: AppTheme.body(
-                      weight: FontWeight.w700,
-                      color: AppTheme.accentPink,
+                    child: Container(
+                      height: 120,
+                      width: double.infinity,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF1F5),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFFBCFE8)),
+                      ),
+                      child: Text(
+                        path == null
+                            ? 'Tap to choose photo (optional)'
+                            : 'Photo selected',
+                        style: AppTheme.body(
+                          weight: FontWeight.w700,
+                          color: AppTheme.accentPink,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: caption,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Caption',
-                  hintText: 'Say something about this memory…',
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppTheme.accentPink,
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: caption,
+                    maxLines: 3,
+                    onChanged: (_) => setLocal(() {}),
+                    decoration: const InputDecoration(
+                      labelText: 'Caption',
+                      hintText: 'Say something, add a feeling, or a photo…',
+                    ),
                   ),
-                  onPressed: path == null ? null : () => Navigator.pop(ctx, true),
-                  child: const Text('Post'),
-                ),
+                  const SizedBox(height: 8),
+                  if (feeling != null)
+                    Chip(
+                      avatar: Text(feeling!.$1),
+                      label: Text('feeling ${feeling!.$2}'),
+                      onDeleted: () => setLocal(() => feeling = null),
+                    ),
+                  TextButton.icon(
+                    onPressed: () async {
+                      final picked = await showModalBottomSheet<(String, String)>(
+                        context: ctx,
+                        showDragHandle: true,
+                        builder: (feelCtx) => StatefulBuilder(
+                          builder: (feelCtx, setFeel) {
+                            final tab = _feelingTabs[feelingTab];
+                            return SafeArea(
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'How are you feeling?',
+                                      style: AppTheme.display(size: 18),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Wrap(
+                                      spacing: 6,
+                                      children: [
+                                        for (var i = 0;
+                                            i < _feelingTabs.length;
+                                            i++)
+                                          ChoiceChip(
+                                            label: Text(_feelingTabs[i].$2),
+                                            selected: feelingTab == i,
+                                            onSelected: (_) =>
+                                                setFeel(() => feelingTab = i),
+                                          ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: [
+                                        for (final item in tab.$3)
+                                          ActionChip(
+                                            avatar: Text(item.$1),
+                                            label: Text(item.$2),
+                                            onPressed: () =>
+                                                Navigator.pop(feelCtx, item),
+                                          ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                      if (picked != null) setLocal(() => feeling = picked);
+                    },
+                    icon: const Icon(Icons.emoji_emotions_outlined),
+                    label: const Text('Feeling'),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppTheme.accentPink,
+                      ),
+                      onPressed:
+                          canPost ? () => Navigator.pop(ctx, true) : null,
+                      child: const Text('Post'),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
-    if (ok != true || path == null || !mounted) return;
+    if (ok != true || !mounted) return;
+    final text = caption.text.trim();
+    final feelingPhrase =
+        feeling == null ? '' : '${feeling!.$1} feeling ${feeling!.$2}';
+    final finalCaption =
+        [text, feelingPhrase].where((e) => e.isNotEmpty).join('\n');
+    if (path == null && finalCaption.isEmpty) return;
     try {
       await context.read<FamilyApiService>().uploadFamilyMedia(
             familyId,
-            filePath: path!,
-            caption: caption.text.trim(),
+            filePath: path,
+            caption: finalCaption.isEmpty ? null : finalCaption,
           );
       _load();
     } catch (e) {
@@ -231,6 +386,7 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen>
       showDragHandle: true,
       builder: (ctx) {
         var likes = _likes(item);
+        var liked = _likedByMe(item);
         var comments = [..._comments(item)];
         return StatefulBuilder(
           builder: (ctx, setLocal) {
@@ -250,6 +406,20 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen>
                           imageUrl: url,
                           fit: BoxFit.contain,
                           width: double.infinity,
+                        ),
+                      )
+                    else if ((item['caption'] ?? '').toString().isNotEmpty)
+                      Expanded(
+                        flex: 2,
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Text(
+                              item['caption'].toString(),
+                              textAlign: TextAlign.center,
+                              style: AppTheme.body(size: 16),
+                            ),
+                          ),
                         ),
                       ),
                     Expanded(
@@ -274,14 +444,37 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen>
                                 IconButton(
                                   onPressed: () async {
                                     try {
-                                      await context
+                                      final res = await context
                                           .read<FamilyApiService>()
                                           .likeFamilyMedia(familyId, id);
-                                      setLocal(() => likes += 1);
+                                      final data = res.data;
+                                      setLocal(() {
+                                        if (data is Map) {
+                                          liked = data['liked'] == true;
+                                          final count = data['likeCount'] ??
+                                              data['likesCount'];
+                                          if (count != null) {
+                                            likes = count is int
+                                                ? count
+                                                : int.tryParse(
+                                                      count.toString(),
+                                                    ) ??
+                                                    likes;
+                                          } else {
+                                            likes = liked
+                                                ? likes + 1
+                                                : (likes > 0 ? likes - 1 : 0);
+                                          }
+                                        }
+                                        item['likedByMe'] = liked;
+                                        item['likeCount'] = likes;
+                                      });
                                     } catch (_) {}
                                   },
                                   icon: Icon(
-                                    Icons.favorite,
+                                    liked
+                                        ? Icons.favorite
+                                        : Icons.favorite_border,
                                     color: AppTheme.accentPink,
                                   ),
                                 ),

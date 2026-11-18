@@ -36,25 +36,63 @@ class _FamilyMessagesScreenState extends State<FamilyMessagesScreen> {
   }
 
   Future<void> _bootstrap() async {
-    final session = context.read<FamilySessionProvider>();
-    if (session.families.isEmpty) await session.loadMine();
-    if (!mounted) return;
-    setState(() {
-      _families = session.families;
-      _familyId = session.familyId ??
-          (session.families.isNotEmpty ? session.families.first.id : null);
-    });
-    await _loadNotices();
+    try {
+      final api = context.read<FamilyApiService>();
+      final session = context.read<FamilySessionProvider>();
+      // Web parity: load families from /families/mine, then notices.
+      List<FamilySummary> families = session.families;
+      try {
+        final res = await api.listMyFamilies();
+        final data = res.data;
+        List list = const [];
+        if (data is Map && data['families'] is List) {
+          list = data['families'] as List;
+        } else if (data is List) {
+          list = data;
+        }
+        families = list
+            .whereType<Map>()
+            .map((e) => FamilySummary.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+        if (families.isNotEmpty) {
+          // Keep session in sync so other tabs use the same family.
+          if (session.families.isEmpty) await session.loadMine();
+        }
+      } catch (_) {
+        if (families.isEmpty) {
+          await session.loadMine();
+          if (!mounted) return;
+          families = session.families;
+        }
+      }
+      if (!mounted) return;
+      final selected = _familyId ??
+          session.familyId ??
+          (families.isNotEmpty ? families.first.id : null);
+      setState(() {
+        _families = families;
+        _familyId = selected;
+      });
+      await _loadNotices();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = e.toString();
+        _notices = const [];
+      });
+    }
   }
 
   Future<void> _loadNotices() async {
     final id = _familyId;
     if (id == null) {
+      if (!mounted) return;
       setState(() {
         _loading = false;
         _notices = const [];
         _canPost = false;
-        _error = 'No family';
+        _error = 'No family selected. Open Dashboard and pull to refresh.';
       });
       return;
     }
@@ -64,6 +102,7 @@ class _FamilyMessagesScreenState extends State<FamilyMessagesScreen> {
     });
     try {
       final res = await context.read<FamilyApiService>().listFamilyNotices(id);
+      if (!mounted) return;
       final data = res.data is Map
           ? Map<String, dynamic>.from(res.data as Map)
           : <String, dynamic>{};
@@ -75,9 +114,11 @@ class _FamilyMessagesScreenState extends State<FamilyMessagesScreen> {
             .toList();
         _canPost = data['canPost'] == true;
         _loading = false;
+        _error = null;
       });
       _markUnreadRead();
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _notices = const [];
@@ -186,6 +227,11 @@ class _FamilyMessagesScreenState extends State<FamilyMessagesScreen> {
     return FtPage(
       title: 'Messages',
       actions: [
+        IconButton(
+          tooltip: 'Refresh',
+          onPressed: _bootstrap,
+          icon: const Icon(Icons.refresh),
+        ),
         if (_canPost)
           IconButton(
             tooltip: 'Post message',
@@ -194,13 +240,30 @@ class _FamilyMessagesScreenState extends State<FamilyMessagesScreen> {
           ),
       ],
       body: RefreshIndicator(
-        onRefresh: _loadNotices,
+        onRefresh: _bootstrap,
         child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
-            Text(
-              'Important family notices from admins. Everyone can read; only admins can post.',
-              style: AppTheme.body(size: 13, color: AppTheme.muted),
+            Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppTheme.emerald100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(Icons.forum, color: AppTheme.emerald600),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Important family notices from admins. Everyone can read; only admins can post.',
+                    style: AppTheme.body(size: 13, color: AppTheme.muted),
+                  ),
+                ),
+              ],
             ),
             if (_families.length > 1) ...[
               const SizedBox(height: 12),
@@ -237,24 +300,50 @@ class _FamilyMessagesScreenState extends State<FamilyMessagesScreen> {
             else if (_error != null)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 32),
-                child: Text(_error!, style: AppTheme.body(color: Colors.red)),
+                child: Column(
+                  children: [
+                    Text(
+                      _error!,
+                      textAlign: TextAlign.center,
+                      style: AppTheme.body(color: Colors.red),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: _bootstrap,
+                      child: const Text('Try again'),
+                    ),
+                  ],
+                ),
               )
             else if (_notices.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 48),
+              Container(
+                width: double.infinity,
+                margin: const EdgeInsets.symmetric(vertical: 24),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 40,
+                ),
+                decoration: BoxDecoration(
+                  color: AppTheme.card,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: AppTheme.borderSoft,
+                    style: BorderStyle.solid,
+                  ),
+                ),
                 child: Column(
                   children: [
                     Icon(Icons.forum_outlined, size: 48, color: AppTheme.muted),
                     const SizedBox(height: 12),
                     Text(
                       'No important messages yet',
-                      style: AppTheme.body(weight: FontWeight.w700),
+                      style: AppTheme.body(weight: FontWeight.w800, size: 16),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       _canPost
                           ? 'Post a notice with text or photo for the family.'
-                          : 'When an admin posts, it will show up here.',
+                          : 'When a family admin posts, it will show up here.',
                       textAlign: TextAlign.center,
                       style: AppTheme.body(size: 13, color: AppTheme.muted),
                     ),
@@ -263,19 +352,20 @@ class _FamilyMessagesScreenState extends State<FamilyMessagesScreen> {
                       FilledButton.icon(
                         onPressed: _openCompose,
                         icon: const Icon(Icons.add, color: Colors.black),
-                        label: const Text('Post message'),
+                        label: const Text('Post first message'),
                       ),
                     ],
                   ],
                 ),
               )
             else
-              for (final notice in _notices) _NoticeCard(
-                notice: notice,
-                when: _when(notice['createdAt']),
-                canDelete: _canPost,
-                onDelete: () => _remove(notice['id']?.toString() ?? ''),
-              ),
+              for (final notice in _notices)
+                _NoticeCard(
+                  notice: notice,
+                  when: _when(notice['createdAt']),
+                  canDelete: _canPost,
+                  onDelete: () => _remove(notice['id']?.toString() ?? ''),
+                ),
           ],
         ),
       ),

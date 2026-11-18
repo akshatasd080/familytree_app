@@ -8,6 +8,7 @@ import '../../data/models/family_models.dart';
 import '../../domain/ego_tree.dart';
 import '../../domain/family_graph_layout.dart';
 import '../../domain/profile_privacy.dart';
+import 'member_preview_sheet.dart';
 
 /// Web-parity profile panel opened from the Family Tree.
 Future<void> showTreeMemberProfileSheet({
@@ -622,14 +623,38 @@ class _TreeMemberProfileSheetState extends State<_TreeMemberProfileSheet> {
                   color: const Color(0xFFFBF9F6),
                   child: Column(
                     children: [
-                      if (widget.onShowTheirTree != null &&
-                          _member.hasLoginAccount &&
-                          !_isMe)
+                      if (widget.isAdmin || _isMe)
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton.icon(
                             style: FilledButton.styleFrom(
                               backgroundColor: AppTheme.forest,
+                            ),
+                            onPressed: () async {
+                              final changed = await showMemberEditSheet(
+                                context: context,
+                                member: _member,
+                                familyId: widget.familyId,
+                              );
+                              if (!mounted) return;
+                              if (changed) {
+                                Navigator.pop(context);
+                                await widget.onChanged();
+                              }
+                            },
+                            icon: const Icon(Icons.edit_outlined),
+                            label: const Text('Edit details'),
+                          ),
+                        ),
+                      if (widget.onShowTheirTree != null &&
+                          _member.hasLoginAccount &&
+                          !_isMe) ...[
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF334155),
                             ),
                             onPressed: () {
                               Navigator.pop(context);
@@ -639,6 +664,7 @@ class _TreeMemberProfileSheetState extends State<_TreeMemberProfileSheet> {
                             label: const Text('Show their tree'),
                           ),
                         ),
+                      ],
                       if (canChat) ...[
                         const SizedBox(height: 8),
                         SizedBox(

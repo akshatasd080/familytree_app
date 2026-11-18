@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -7,8 +8,22 @@ import '../../../../core/utils/media_url.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../data/family_api_service.dart';
 import '../../data/models/family_models.dart';
+import '../../domain/ego_tree.dart';
 import '../../domain/profile_privacy.dart';
+import 'phone_change_otp_dialog.dart';
 import 'state_city_select.dart';
+
+const _editBloodGroups = [
+  'A+',
+  'A-',
+  'B+',
+  'B-',
+  'AB+',
+  'AB-',
+  'O+',
+  'O-',
+  'Unknown',
+];
 
 const _relationshipChoices = <String>[
   'Father',
@@ -685,7 +700,14 @@ class _MemberEditSheetState extends State<_MemberEditSheet> {
   late final TextEditingController _notes;
   late String _location;
   late String _relationship;
+  late String _savedPhone;
+  late String _gender;
+  late String _blood;
+  late String _treeCardShow;
+  String? _dob;
+  String? _avatar;
   bool _saving = false;
+  bool _uploadingPhoto = false;
   String? _error;
 
   @override
@@ -697,11 +719,24 @@ class _MemberEditSheetState extends State<_MemberEditSheet> {
     final phone = (m.phone ?? info['phone'] ?? '')
         .toString()
         .replaceAll(RegExp(r'\D'), '');
-    _phone = TextEditingController(
-      text: phone.length > 10 ? phone.substring(phone.length - 10) : phone,
-    );
+    final digits = phone.length > 10 ? phone.substring(phone.length - 10) : phone;
+    _phone = TextEditingController(text: digits);
+    _savedPhone = digits;
     _location = (m.location ?? info['location'] ?? '').toString();
     _notes = TextEditingController(text: (info['notes'] ?? '').toString());
+    _gender = (m.gender ?? info['gender'] ?? '').toString().toLowerCase();
+    if (_gender != 'male' && _gender != 'female') _gender = '';
+    final bg = (info['bloodGroup'] ?? info['blood_group'] ?? 'Unknown')
+        .toString();
+    _blood = _editBloodGroups.contains(bg) ? bg : 'Unknown';
+    _treeCardShow = normalizeTreeCardShow(
+      info['treeCardShow'] ?? info['tree_card_show'],
+    );
+    final dobRaw = (info['dateOfBirth'] ?? info['date_of_birth'] ?? '')
+        .toString();
+    _dob = dobRaw.length >= 10 ? dobRaw.substring(0, 10) : null;
+    if (_dob != null && _dob!.isEmpty) _dob = null;
+    _avatar = m.avatar ?? info['avatar']?.toString();
     final rel = (m.relationship ?? '').trim();
     if (m.isSiteCreator) {
       _relationship = 'SiteCreator';
@@ -721,6 +756,63 @@ class _MemberEditSheetState extends State<_MemberEditSheet> {
     super.dispose();
   }
 
+  Future<void> _pickPhoto() async {
+    final file = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
+    if (file == null) return;
+    setState(() => _uploadingPhoto = true);
+    try {
+      final res = await context
+          .read<FamilyApiService>()
+          .uploadFamilyMemberPhoto(widget.familyId, file.path);
+      final data = res.data;
+      String? path;
+      if (data is Map) {
+        path = (data['avatar'] ??
+                data['path'] ??
+                data['filePath'] ??
+                data['url'])
+            ?.toString();
+        final member = data['member'];
+        if (member is Map) {
+          path ??= (member['avatar'] ?? member['photo'])?.toString();
+        }
+      }
+      if (path != null && path.isNotEmpty) {
+        setState(() => _avatar = path);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _uploadingPhoto = false);
+    }
+  }
+
+  Future<void> _persist(String phone) async {
+    final payload = <String, dynamic>{
+      'name': _name.text.trim(),
+      'location': _location.trim(),
+      'notes': _notes.text.trim(),
+      'gender': _gender,
+      'bloodGroup': _blood,
+      'treeCardShow': _treeCardShow,
+      if (_dob != null) 'dateOfBirth': _dob,
+      if (_avatar != null && _avatar!.isNotEmpty) 'avatar': _avatar,
+    };
+    if (phone.isNotEmpty) payload['phone'] = phone;
+    if (!widget.member.isSiteCreator) {
+      payload['relationship'] = _relationship;
+    }
+    await context.read<FamilyApiService>().updateFamilyMember(
+          widget.familyId,
+          widget.member.id,
+          payload,
+        );
+  }
+
   Future<void> _save() async {
     final phone = _phone.text.replaceAll(RegExp(r'\D'), '');
     if (_name.text.trim().length < 2) {
@@ -728,14 +820,14 @@ class _MemberEditSheetState extends State<_MemberEditSheet> {
       return;
     }
     final needsPhone = widget.member.isAlive && phone.isNotEmpty;
-    if (needsPhone && !RegExp(r'^\d{10}$').hasMatch(phone)) {
-      setState(() => _error = 'Mobile number must be exactly 10 digits.');
+    if (needsPhone && !RegExp(r'^[6-9]\d{9}$').hasMatch(phone)) {
+      setState(() => _error = 'Enter a valid 10-digit mobile number.');
       return;
     }
     if (widget.member.isAlive &&
         widget.member.hasLoginAccount &&
-        !RegExp(r'^\d{10}$').hasMatch(phone)) {
-      setState(() => _error = 'Mobile number must be exactly 10 digits.');
+        !RegExp(r'^[6-9]\d{9}$').hasMatch(phone)) {
+      setState(() => _error = 'Enter a valid 10-digit mobile number.');
       return;
     }
     if (!widget.member.isSiteCreator && _relationship.trim().isEmpty) {
@@ -743,25 +835,48 @@ class _MemberEditSheetState extends State<_MemberEditSheet> {
       return;
     }
 
+    final phoneChanged = widget.member.hasLoginAccount &&
+        _savedPhone.isNotEmpty &&
+        phone.isNotEmpty &&
+        phone != _savedPhone;
+
+    if (phoneChanged) {
+      final api = context.read<FamilyApiService>();
+      final verified = await showPhoneChangeOtpDialog(
+        context: context,
+        phone: phone,
+        description:
+            'OTP will be sent to +91 $phone. After verify, this becomes their login number.',
+        onRequestOtp: (p) async {
+          await api.requestMemberPhoneChangeOtp(
+            widget.familyId,
+            widget.member.id,
+            p,
+          );
+        },
+        onVerifyOtp: (p, otp) async {
+          await api.verifyMemberPhoneChangeOtp(
+            widget.familyId,
+            widget.member.id,
+            p,
+            otp,
+          );
+        },
+      );
+      if (!mounted) return;
+      if (!verified) {
+        setState(() => _phone.text = _savedPhone);
+        return;
+      }
+      _savedPhone = phone;
+    }
+
     setState(() {
       _saving = true;
       _error = null;
     });
     try {
-      final payload = <String, dynamic>{
-        'name': _name.text.trim(),
-        'location': _location.trim(),
-        'notes': _notes.text.trim(),
-      };
-      if (phone.isNotEmpty) payload['phone'] = phone;
-      if (!widget.member.isSiteCreator) {
-        payload['relationship'] = _relationship;
-      }
-      await context.read<FamilyApiService>().updateFamilyMember(
-            widget.familyId,
-            widget.member.id,
-            payload,
-          );
+      await _persist(phone);
       if (!mounted) return;
       Navigator.pop(context, true);
     } catch (e) {
@@ -794,6 +909,57 @@ class _MemberEditSheetState extends State<_MemberEditSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Edit Family Member', style: AppTheme.display(size: 20)),
+            const SizedBox(height: 14),
+            Center(
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 40,
+                    backgroundColor: AppTheme.forest.withValues(alpha: 0.12),
+                    backgroundImage: mediaUrl(_avatar) != null
+                        ? NetworkImage(mediaUrl(_avatar)!)
+                        : null,
+                    child: mediaUrl(_avatar) == null
+                        ? Text(
+                            widget.member.name.isNotEmpty
+                                ? widget.member.name[0].toUpperCase()
+                                : '?',
+                            style: AppTheme.display(size: 24),
+                          )
+                        : null,
+                  ),
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Material(
+                      color: AppTheme.forest,
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: _uploadingPhoto ? null : _pickPhoto,
+                        child: Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: _uploadingPhoto
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.camera_alt,
+                                  size: 14,
+                                  color: Colors.white,
+                                ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 14),
             TextField(
               controller: _name,
@@ -834,6 +1000,51 @@ class _MemberEditSheetState extends State<_MemberEditSheet> {
                 },
               ),
             const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              value: _gender.isEmpty ? null : _gender,
+              decoration: const InputDecoration(labelText: 'Gender'),
+              items: const [
+                DropdownMenuItem(value: 'male', child: Text('Male')),
+                DropdownMenuItem(value: 'female', child: Text('Female')),
+              ],
+              onChanged: (v) => setState(() => _gender = v ?? ''),
+            ),
+            const SizedBox(height: 10),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                _dob == null ? 'Date of birth' : 'DOB: $_dob',
+                style: AppTheme.body(),
+              ),
+              trailing: const Icon(Icons.calendar_today, size: 18),
+              onTap: () async {
+                final now = DateTime.now();
+                final initial = DateTime.tryParse(_dob ?? '') ??
+                    DateTime(now.year - 25);
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: initial,
+                  firstDate: DateTime(1900),
+                  lastDate: now,
+                );
+                if (picked == null) return;
+                setState(() {
+                  _dob = DateFormat('yyyy-MM-dd').format(picked);
+                });
+              },
+            ),
+            DropdownButtonFormField<String>(
+              value: _blood,
+              decoration: const InputDecoration(labelText: 'Blood group'),
+              items: [
+                for (final b in _editBloodGroups)
+                  DropdownMenuItem(value: b, child: Text(b)),
+              ],
+              onChanged: (v) {
+                if (v != null) setState(() => _blood = v);
+              },
+            ),
+            const SizedBox(height: 10),
             TextField(
               controller: _phone,
               keyboardType: TextInputType.phone,
@@ -841,6 +1052,9 @@ class _MemberEditSheetState extends State<_MemberEditSheet> {
               decoration: InputDecoration(
                 labelText: 'Phone',
                 counterText: '${_phone.text.length}/10 digits',
+                helperText: widget.member.hasLoginAccount
+                    ? 'Changing login mobile needs OTP on the new number'
+                    : null,
               ),
               onChanged: (_) => setState(() {}),
             ),
@@ -848,6 +1062,27 @@ class _MemberEditSheetState extends State<_MemberEditSheet> {
             StateCitySelect(
               value: _location,
               onChanged: (v) => setState(() => _location = v),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Show on family tree',
+              style: AppTheme.body(weight: FontWeight.w700, size: 13),
+            ),
+            Wrap(
+              spacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('Education'),
+                  selected: _treeCardShow == 'education',
+                  onSelected: (_) =>
+                      setState(() => _treeCardShow = 'education'),
+                ),
+                ChoiceChip(
+                  label: const Text('Job'),
+                  selected: _treeCardShow == 'job',
+                  onSelected: (_) => setState(() => _treeCardShow = 'job'),
+                ),
+              ],
             ),
             const SizedBox(height: 10),
             TextField(

@@ -9,11 +9,13 @@ import '../../data/family_api_service.dart';
 import '../../data/models/family_models.dart';
 import '../../domain/ego_tree.dart';
 import '../../domain/family_graph_layout.dart';
+import '../../domain/tree_themes.dart';
 import '../providers/family_providers.dart';
 import '../widgets/add_relative_radial.dart';
 import '../widgets/add_relative_sheet.dart';
 import '../widgets/family_chat_panel.dart';
 import '../widgets/family_graph_view.dart';
+import '../widgets/root_tree_view.dart';
 import '../widgets/tree_member_profile_sheet.dart';
 
 const _maxAncestorDepth = 12;
@@ -34,7 +36,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   bool _downloading = false;
   String? _error;
   String _scope = 'full';
-  String _viewMode = 'diagram'; // diagram | generations
+  String _viewMode = 'diagram'; // diagram | generations | root
   String _generationFilter = 'all';
   int _ancestorDepth = 1;
   FamilyMember? _selected;
@@ -44,11 +46,23 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   String? _chatPeerUserId;
   int _chatDockNonce = 0;
   bool _searchOpen = false;
+  String _treeThemeId = defaultTreeThemeId;
+
+  TreeTheme get _treeTheme => getTreeTheme(_treeThemeId);
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadTheme();
+      _load();
+    });
+  }
+
+  Future<void> _loadTheme() async {
+    final id = await loadStoredTreeThemeId();
+    if (!mounted) return;
+    setState(() => _treeThemeId = id);
   }
 
   @override
@@ -196,10 +210,15 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   }
 
   List<FamilyMember> get _placedMembers {
+    final all = _tree?.members ?? const <FamilyMember>[];
+    if (all.isEmpty) return const [];
     final hidden = _unplacedMembers.map((m) => m.id).toSet();
-    return (_tree?.members ?? const <FamilyMember>[])
-        .where((m) => !hidden.contains(m.id))
-        .toList();
+    final placed = all.where((m) => !hidden.contains(m.id)).toList();
+    // Never blank the diagram: if filtering hid everyone (or almost
+    // everyone on a small family), show the full directory list.
+    if (placed.isEmpty) return all;
+    if (all.length <= 3 && placed.length < all.length) return all;
+    return placed;
   }
 
   Future<void> _load() async {
@@ -227,7 +246,31 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
       final data = res.data is Map
           ? Map<String, dynamic>.from(res.data as Map)
           : <String, dynamic>{};
-      final tree = FamilyTreeData.fromJson(data);
+      var tree = FamilyTreeData.fromJson(data);
+      // Fallback: if tree endpoint returns empty, still show directory members.
+      if (tree.members.isEmpty) {
+        try {
+          final memRes = await api.listFamilyMembers(id);
+          final mdata = memRes.data;
+          List list = const [];
+          if (mdata is Map && mdata['members'] is List) {
+            list = mdata['members'] as List;
+          } else if (mdata is List) {
+            list = mdata;
+          }
+          final members = list
+              .whereType<Map>()
+              .map((e) => FamilyMember.fromJson(Map<String, dynamic>.from(e)))
+              .toList();
+          if (members.isNotEmpty) {
+            tree = FamilyTreeData(
+              members: members,
+              relationships: tree.relationships,
+              role: tree.role ?? data['role']?.toString(),
+            );
+          }
+        } catch (_) {}
+      }
       final maps = tree.members.map(_memberToMap).toList();
       if (!mounted) return;
       final focus = _focusOverrideId ??
@@ -240,9 +283,36 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
         _tree = tree;
         _role = tree.role;
         _ancestorDepth = mathMax(_ancestorDepth, mathMax(filled, 1));
+        _error = null;
       });
     } catch (e) {
       if (!mounted) return;
+      // Last-resort: members directory so Tree is never a blank page.
+      try {
+        final memRes = await api.listFamilyMembers(id);
+        final mdata = memRes.data;
+        List list = const [];
+        if (mdata is Map && mdata['members'] is List) {
+          list = mdata['members'] as List;
+        } else if (mdata is List) {
+          list = mdata;
+        }
+        final members = list
+            .whereType<Map>()
+            .map((e) => FamilyMember.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+        if (members.isNotEmpty) {
+          setState(() {
+            _tree = FamilyTreeData(
+              members: members,
+              relationships: const [],
+              role: null,
+            );
+            _error = null;
+          });
+          return;
+        }
+      } catch (_) {}
       setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -492,7 +562,9 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   Future<void> _download() async {
     if (_viewMode != 'diagram') {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Switch to Diagram to download the tree')),
+        const SnackBar(
+          content: Text('Switch to Diagram to download the tree'),
+        ),
       );
       return;
     }
@@ -507,6 +579,62 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     } finally {
       if (mounted) setState(() => _downloading = false);
     }
+  }
+
+  Future<void> _pickTreeTheme() async {
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppTheme.canvas,
+      showDragHandle: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            children: [
+              Text('Tree theme', style: AppTheme.display(size: 18)),
+              const SizedBox(height: 8),
+              for (final theme in treeThemes.values)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  selected: theme.id == _treeThemeId,
+                  leading: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final band in theme.bands.take(4))
+                        Container(
+                          width: 14,
+                          height: 28,
+                          margin: const EdgeInsets.only(right: 3),
+                          decoration: BoxDecoration(
+                            color: band.bg,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: theme.cardBorder),
+                          ),
+                        ),
+                    ],
+                  ),
+                  title: Text(
+                    theme.label,
+                    style: AppTheme.body(weight: FontWeight.w800),
+                  ),
+                  subtitle: Text(
+                    theme.hint,
+                    style: AppTheme.body(size: 12, color: AppTheme.muted),
+                  ),
+                  trailing: theme.id == _treeThemeId
+                      ? Icon(Icons.check_circle, color: AppTheme.forest)
+                      : null,
+                  onTap: () => Navigator.pop(ctx, theme.id),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+    if (chosen == null || chosen == _treeThemeId) return;
+    setState(() => _treeThemeId = chosen);
+    await storeTreeThemeId(chosen);
   }
 
   void _addPreviousGeneration() {
@@ -565,13 +693,133 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                         ),
                       ),
                     )
-                  : Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
+                  : LayoutBuilder(
+                      builder: (context, bodyConstraints) {
+                        final maxToolbar =
+                            (bodyConstraints.maxHeight * 0.36).clamp(120.0, 320.0);
+                        final graphChild = members.isEmpty
+                            ? Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(24),
+                                  child: Text(
+                                    'No members on the tree yet. Add people from Members.',
+                                    textAlign: TextAlign.center,
+                                    style: AppTheme.body(color: AppTheme.muted),
+                                  ),
+                                ),
+                              )
+                            : _viewMode == 'generations'
+                                ? ColoredBox(
+                                    color: _treeTheme.canvasBg,
+                                    child: _GenerationsList(
+                                      layers: _visibleGenerationLayers,
+                                      selectedId: _selected?.id,
+                                      meUserId: auth.user?.id,
+                                      onSelect: (map) {
+                                        final id =
+                                            (map['id'] ?? '').toString();
+                                        final userId = (map['userId'] ??
+                                                map['user_id'] ??
+                                                '')
+                                            .toString();
+                                        FamilyMember? member;
+                                        for (final m in members) {
+                                          if (m.id == id ||
+                                              (userId.isNotEmpty &&
+                                                  m.userId == userId)) {
+                                            member = m;
+                                            break;
+                                          }
+                                        }
+                                        member ??=
+                                            FamilyMember.fromJson(map);
+                                        _openMemberProfile(member);
+                                      },
+                                    ),
+                                  )
+                                : _viewMode == 'root'
+                                    ? RootTreeView(
+                                        members: _placedMembers,
+                                        relationships:
+                                            _tree?.relationships ?? const [],
+                                        selectedId: _selected?.id,
+                                        onSelect: _openMemberProfile,
+                                      )
+                                    : Stack(
+                                        children: [
+                                          FamilyGraphView(
+                                            key: _graphKey,
+                                            members: _placedMembers,
+                                            relationships:
+                                                _tree?.relationships ??
+                                                    const [],
+                                            focusUserId: _focusId,
+                                            meUserId: auth.user?.id,
+                                            selectedId: _selected?.id,
+                                            canAdd: _canAddOnTree,
+                                            showExpand: _scope == 'near',
+                                            theme: _treeTheme,
+                                            onMemberTap: _openMemberProfile,
+                                            onAdd: _canAddOnTree
+                                                ? _openAdd
+                                                : null,
+                                            onLink: _canAddOnTree
+                                                ? _openLink
+                                                : null,
+                                            onExpand: _scope == 'near'
+                                                ? _expand
+                                                : null,
+                                            onMakeAdmin: _isAdmin
+                                                ? _toggleAdmin
+                                                : null,
+                                          ),
+                                          if (_selected != null)
+                                            Positioned(
+                                              left: 12,
+                                              right: 12,
+                                              bottom: 12,
+                                              child: _SelectedMemberCard(
+                                                member: _selected!,
+                                                meUserId: auth.user?.id,
+                                                isAdmin: _isAdmin,
+                                                canAdd: _canAddOnTree,
+                                                onClose: () => setState(
+                                                  () => _selected = null,
+                                                ),
+                                                onChat: () {
+                                                  setState(() {
+                                                    _chatPeerUserId =
+                                                        _selected!.userId;
+                                                    _chatDockNonce++;
+                                                    _selected = null;
+                                                  });
+                                                },
+                                                onAdd: () =>
+                                                    _openAdd(_selected!),
+                                                onAdmin: () =>
+                                                    _toggleAdmin(_selected!),
+                                                onShowTree: () =>
+                                                    _showTheirTree(
+                                                  _selected!,
+                                                ),
+                                                onOpenProfile: () =>
+                                                    _openMemberProfile(
+                                                  _selected!,
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      );
+                        return Column(
+                          children: [
+                            ConstrainedBox(
+                              constraints:
+                                  BoxConstraints(maxHeight: maxToolbar),
+                              child: ListView(
+                                shrinkWrap: true,
+                                padding:
+                                    const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                                children: [
                               if (session.families.length > 1)
                                 SizedBox(
                                   height: 40,
@@ -705,32 +953,42 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                               label: const Text('My tree'),
                                             ),
                                         ],
-                                        _ModeToggle(
-                                          left: 'Diagram',
-                                          right: 'List',
-                                          leftSelected: _viewMode == 'diagram',
-                                          onLeft: () => setState(
-                                            () => _viewMode = 'diagram',
-                                          ),
-                                          onRight: () => setState(
-                                            () => _viewMode = 'generations',
-                                          ),
+                                        _ViewModeToggle(
+                                          mode: _viewMode,
+                                          onChanged: (mode) =>
+                                              setState(() => _viewMode = mode),
                                         ),
-                                        _ModeToggle(
-                                          left: 'Complete tree',
-                                          right: 'My circle',
-                                          leftSelected: _scope == 'full',
-                                          filled: true,
-                                          onLeft: () {
-                                            if (_scope == 'full') return;
-                                            setState(() => _scope = 'full');
-                                            _load();
-                                          },
-                                          onRight: () {
-                                            if (_scope == 'near') return;
-                                            setState(() => _scope = 'near');
-                                            _load();
-                                          },
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 8,
+                                          crossAxisAlignment:
+                                              WrapCrossAlignment.center,
+                                          children: [
+                                            _ModeToggle(
+                                              left: 'Complete tree',
+                                              right: 'My circle',
+                                              leftSelected: _scope == 'full',
+                                              filled: true,
+                                              onLeft: () {
+                                                if (_scope == 'full') return;
+                                                setState(() => _scope = 'full');
+                                                _load();
+                                              },
+                                              onRight: () {
+                                                if (_scope == 'near') return;
+                                                setState(() => _scope = 'near');
+                                                _load();
+                                              },
+                                            ),
+                                            OutlinedButton.icon(
+                                              onPressed: _pickTreeTheme,
+                                              icon: const Icon(
+                                                Icons.palette_outlined,
+                                                size: 16,
+                                              ),
+                                              label: Text(_treeTheme.label),
+                                            ),
+                                          ],
                                         ),
                                       ],
                                     ),
@@ -991,85 +1249,12 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                 ),
                               ],
                             ],
-                          ),
-                        ),
-                        Expanded(
-                          child: _viewMode == 'generations'
-                              ? _GenerationsList(
-                                  layers: _visibleGenerationLayers,
-                                  selectedId: _selected?.id,
-                                  meUserId: auth.user?.id,
-                                  onSelect: (map) {
-                                    final id = (map['id'] ?? '').toString();
-                                    final userId =
-                                        (map['userId'] ?? map['user_id'] ?? '')
-                                            .toString();
-                                    FamilyMember? member;
-                                    for (final m in members) {
-                                      if (m.id == id ||
-                                          (userId.isNotEmpty &&
-                                              m.userId == userId)) {
-                                        member = m;
-                                        break;
-                                      }
-                                    }
-                                    member ??= FamilyMember.fromJson(map);
-                                    _openMemberProfile(member);
-                                  },
-                                )
-                              : Stack(
-                                  children: [
-                                    FamilyGraphView(
-                                      key: _graphKey,
-                                      members: _placedMembers,
-                                      relationships:
-                                          _tree?.relationships ?? const [],
-                                      focusUserId: _focusId,
-                                      meUserId: auth.user?.id,
-                                      selectedId: _selected?.id,
-                                      canAdd: _canAddOnTree,
-                                      showExpand: _scope == 'near',
-                                      onMemberTap: _openMemberProfile,
-                                      onAdd: _canAddOnTree ? _openAdd : null,
-                                      onLink: _canAddOnTree ? _openLink : null,
-                                      onExpand:
-                                          _scope == 'near' ? _expand : null,
-                                      onMakeAdmin:
-                                          _isAdmin ? _toggleAdmin : null,
-                                    ),
-                                    if (_selected != null)
-                                      Positioned(
-                                        left: 12,
-                                        right: 12,
-                                        bottom: 12,
-                                        child: _SelectedMemberCard(
-                                          member: _selected!,
-                                          meUserId: auth.user?.id,
-                                          isAdmin: _isAdmin,
-                                          canAdd: _canAddOnTree,
-                                          onClose: () =>
-                                              setState(() => _selected = null),
-                                          onChat: () {
-                                            setState(() {
-                                              _chatPeerUserId =
-                                                  _selected!.userId;
-                                              _chatDockNonce++;
-                                              _selected = null;
-                                            });
-                                          },
-                                          onAdd: () => _openAdd(_selected!),
-                                          onAdmin: () =>
-                                              _toggleAdmin(_selected!),
-                                          onShowTree: () =>
-                                              _showTheirTree(_selected!),
-                                          onOpenProfile: () =>
-                                              _openMemberProfile(_selected!),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                        ),
-                      ],
+                              ),
+                            ),
+                            Expanded(child: graphChild),
+                          ],
+                        );
+                      },
                     ),
         ),
         if (!_loading && _error == null && session.familyId != null)
@@ -1147,6 +1332,67 @@ class _ToolbarCard extends StatelessWidget {
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
       child: child,
+    );
+  }
+}
+
+class _ViewModeToggle extends StatelessWidget {
+  const _ViewModeToggle({
+    required this.mode,
+    required this.onChanged,
+  });
+
+  final String mode;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _pill('Diagram', mode == 'diagram', () => onChanged('diagram')),
+          _pill('List', mode == 'generations', () => onChanged('generations')),
+          _pill('Root', mode == 'root', () => onChanged('root')),
+        ],
+      ),
+    );
+  }
+
+  Widget _pill(String label, bool selected, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 4,
+                  ),
+                ]
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: selected ? AppTheme.forest : AppTheme.muted,
+          ),
+        ),
+      ),
     );
   }
 }

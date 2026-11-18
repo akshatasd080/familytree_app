@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../app/router.dart';
@@ -129,6 +128,100 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return null;
   }
 
+  String _memberGender(FamilyMember m) {
+    final raw = (m.gender ?? m.profileInfo['gender'] ?? '')
+        .toString()
+        .trim()
+        .toLowerCase();
+    if (raw == 'male' || raw == 'female') return raw;
+    final r = _norm(m.relationship);
+    if ([
+      'mother',
+      'sister',
+      'daughter',
+      'wife',
+      'aunt',
+      'grandmother',
+      'spouse',
+      'partner',
+    ].contains(r)) {
+      return 'female';
+    }
+    return 'male';
+  }
+
+  DateTime? _parseDob(dynamic value) {
+    if (value == null) return null;
+    final s = value.toString().trim();
+    if (s.isEmpty) return null;
+    if (RegExp(r'^\d{4}-\d{2}-\d{2}').hasMatch(s)) {
+      return DateTime.tryParse(s.substring(0, 10));
+    }
+    return DateTime.tryParse(s);
+  }
+
+  ({int years, int months, int days, int totalDays})? _ageParts(DateTime dob) {
+    final now = DateTime.now();
+    if (dob.isAfter(now)) return null;
+    var years = now.year - dob.year;
+    var months = now.month - dob.month;
+    var days = now.day - dob.day;
+    if (days < 0) {
+      months -= 1;
+      final prev = DateTime(now.year, now.month, 0);
+      days += prev.day;
+    }
+    if (months < 0) {
+      years -= 1;
+      months += 12;
+    }
+    if (years < 0 || years >= 130) return null;
+    final totalDays = now.difference(dob).inDays;
+    return (years: years, months: months, days: days, totalDays: totalDays);
+  }
+
+  Map<String, dynamic> _familyOverview() {
+    var male = 0;
+    var female = 0;
+    final livingWithAge = <Map<String, dynamic>>[];
+    for (final m in _members) {
+      final alive = m.isAlive && m.profileInfo['isAlive'] != false;
+      if (!alive) continue;
+      final gender = _memberGender(m);
+      if (gender == 'male') {
+        male += 1;
+      } else if (gender == 'female') {
+        female += 1;
+      }
+      final dob = _parseDob(
+        m.profileInfo['dateOfBirth'] ?? m.profileInfo['date_of_birth'],
+      );
+      if (dob == null) continue;
+      final age = _ageParts(dob);
+      if (age == null) continue;
+      livingWithAge.add({
+        'id': m.id,
+        'name': m.name,
+        'age': age,
+        'label': '${age.years}y ${age.months}m ${age.days}d',
+        'totalDays': age.totalDays,
+      });
+    }
+    livingWithAge.sort(
+      (a, b) => (b['totalDays'] as int).compareTo(a['totalDays'] as int),
+    );
+    final totalGender = male + female;
+    return {
+      'male': male,
+      'female': female,
+      'malePct': totalGender == 0 ? 50 : ((male / totalGender) * 100).round(),
+      'femalePct':
+          totalGender == 0 ? 50 : ((female / totalGender) * 100).round(),
+      'oldest': livingWithAge.isEmpty ? null : livingWithAge.first,
+      'youngest': livingWithAge.isEmpty ? null : livingWithAge.last,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = context.watch<FamilySessionProvider>();
@@ -170,6 +263,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       userName: auth.user?.name,
                       bannerUrl: bannerUrl,
                     ),
+                    const SizedBox(height: 12),
+                    _FamilyOverviewCard(overview: _familyOverview()),
                     if (_invites.isNotEmpty) ...[
                       const SizedBox(height: 14),
                       FtSectionCard(
@@ -827,6 +922,84 @@ class _MiniNode extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _FamilyOverviewCard extends StatelessWidget {
+  const _FamilyOverviewCard({required this.overview});
+
+  final Map<String, dynamic> overview;
+
+  @override
+  Widget build(BuildContext context) {
+    final male = overview['male'] as int? ?? 0;
+    final female = overview['female'] as int? ?? 0;
+    final malePct = male + female == 0 ? 50 : (overview['malePct'] as int? ?? 50);
+    final femalePct = male + female == 0 ? 50 : 100 - malePct;
+    final oldest = overview['oldest'] as Map?;
+    final youngest = overview['youngest'] as Map?;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.borderSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Family overview',
+            style: AppTheme.body(weight: FontWeight.w800, size: 13),
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: SizedBox(
+              height: 10,
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: malePct.clamp(1, 99),
+                    child: Container(color: const Color(0xFF60A5FA)),
+                  ),
+                  Expanded(
+                    flex: femalePct.clamp(1, 99),
+                    child: Container(color: const Color(0xFFD670B1)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text(
+                '$male Male',
+                style: AppTheme.body(size: 12, weight: FontWeight.w700),
+              ),
+              const Spacer(),
+              Text(
+                '$female Female',
+                style: AppTheme.body(size: 12, weight: FontWeight.w700),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Oldest: ${oldest == null ? '—' : '${oldest['name']} (${oldest['label']})'}',
+            style: AppTheme.body(size: 12, color: AppTheme.mutedSoft),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Youngest: ${youngest == null ? '—' : '${youngest['name']} (${youngest['label']})'}',
+            style: AppTheme.body(size: 12, color: AppTheme.mutedSoft),
+          ),
+        ],
       ),
     );
   }

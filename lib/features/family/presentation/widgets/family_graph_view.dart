@@ -12,6 +12,7 @@ import '../../../../core/utils/media_url.dart';
 import '../../data/models/family_models.dart';
 import '../../domain/ego_tree.dart';
 import '../../domain/family_graph_layout.dart';
+import '../../domain/tree_themes.dart';
 
 /// Interactive tree canvas using web-ported layout (`buildFamilyLayout`).
 class FamilyGraphView extends StatefulWidget {
@@ -24,6 +25,7 @@ class FamilyGraphView extends StatefulWidget {
     this.selectedId,
     this.canAdd = false,
     this.showExpand = false,
+    this.theme,
     this.onMemberTap,
     this.onAdd,
     this.onLink,
@@ -39,6 +41,7 @@ class FamilyGraphView extends StatefulWidget {
   final String? selectedId;
   final bool canAdd;
   final bool showExpand;
+  final TreeTheme? theme;
   final ValueChanged<FamilyMember>? onMemberTap;
   final ValueChanged<FamilyMember>? onAdd;
   final ValueChanged<FamilyMember>? onLink;
@@ -127,14 +130,15 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
     final canvas = Canvas(recorder);
     canvas.scale(pixelRatio);
 
-    final bg = Paint()..color = const Color(0xFFF8FAFC);
+    final theme = widget.theme ?? getTreeTheme(defaultTreeThemeId);
+    final bg = Paint()..color = theme.canvasBg;
     canvas.drawRect(Rect.fromLTWH(0, 0, width, height), bg);
 
     final titlePainter = TextPainter(
       text: TextSpan(
         text: familyName,
-        style: const TextStyle(
-          color: Color(0xFF0F172A),
+        style: TextStyle(
+          color: theme.cardText,
           fontSize: 22,
           fontWeight: FontWeight.w700,
         ),
@@ -146,16 +150,18 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
     canvas.save();
     canvas.translate(pad, header);
 
-    for (final band in layout.bands) {
+    for (var i = 0; i < layout.bands.length; i++) {
+      final band = layout.bands[i];
+      final themed = theme.bands[i % theme.bands.length];
       canvas.drawRect(
         Rect.fromLTWH(0, band.y, layout.width, band.height),
-        Paint()..color = _parseHex(band.bg).withValues(alpha: 0.55),
+        Paint()..color = themed.bg.withValues(alpha: 0.55),
       );
       final label = TextPainter(
         text: TextSpan(
           text: band.title,
           style: TextStyle(
-            color: _parseHex(band.ink),
+            color: themed.ink,
             fontSize: 13,
             fontWeight: FontWeight.w700,
           ),
@@ -169,10 +175,10 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
       if (edge.points.length < 2) continue;
       final paint = Paint()
         ..color = edge.kind == 'spouse'
-            ? const Color(0xFFE11D48)
+            ? theme.lines.spouse
             : edge.kind == 'sibling'
-                ? const Color(0xFF7C3AED)
-                : const Color(0xFF2563EB)
+                ? theme.lines.sibling
+                : theme.lines.parent
         ..strokeWidth = edge.kind == 'spouse' ? 2.8 : 2.4
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round;
@@ -365,10 +371,25 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
     final rels = widget.relationships.map(_normalizeRelationship).toList();
     final focus =
         widget.focusUserId ?? resolveDefaultFocusUserId(memberMaps, null);
-    final layout = buildFamilyLayout(memberMaps, rels, focus);
+    FamilyLayoutResult layout;
+    try {
+      layout = buildFamilyLayout(memberMaps, rels, focus);
+    } catch (e) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(
+            'Could not layout tree. Pull to refresh.\n$e',
+            textAlign: TextAlign.center,
+            style: AppTheme.body(color: AppTheme.muted),
+          ),
+        ),
+      );
+    }
     _lastLayout = layout;
     final byId = {for (final m in widget.members) m.id: m};
     _content = Size(layout.width, layout.height);
+    final theme = widget.theme ?? getTreeTheme(defaultTreeThemeId);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -378,7 +399,9 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
           _scheduleFit();
         }
 
-        return Stack(
+        return ColoredBox(
+          color: theme.canvasBg,
+          child: Stack(
           children: [
             ClipRect(
               child: InteractiveViewer(
@@ -394,16 +417,16 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      ...layout.bands.map((band) {
-                        return Positioned(
+                      for (var i = 0; i < layout.bands.length; i++)
+                        Positioned(
                           left: 0,
-                          top: band.y,
+                          top: layout.bands[i].y,
                           width: layout.width,
-                          height: band.height,
+                          height: layout.bands[i].height,
                           child: IgnorePointer(
                             child: DecoratedBox(
                               decoration: BoxDecoration(
-                                color: _parseHex(band.bg)
+                                color: theme.bands[i % theme.bands.length].bg
                                     .withValues(alpha: 0.42),
                               ),
                               child: Align(
@@ -413,11 +436,12 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
                                   child: SizedBox(
                                     width: 108,
                                     child: Text(
-                                      band.title,
+                                      layout.bands[i].title,
                                       maxLines: 3,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        color: _parseHex(band.ink),
+                                        color: theme
+                                            .bands[i % theme.bands.length].ink,
                                         fontWeight: FontWeight.w800,
                                         fontSize: 12,
                                         height: 1.2,
@@ -428,11 +452,13 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
                               ),
                             ),
                           ),
-                        );
-                      }),
+                        ),
                       CustomPaint(
                         size: Size(layout.width, layout.height),
-                        painter: _LayoutEdgePainter(layout.edges),
+                        painter: _LayoutEdgePainter(
+                          layout.edges,
+                          lines: theme.lines,
+                        ),
                       ),
                       ...layout.nodes.map((node) {
                         final id = (node['id'] ?? '').toString();
@@ -456,6 +482,7 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
                           child: _MemberNode(
                             member: member,
                             treeRole: treeRole,
+                            theme: theme,
                             isMe: isMe,
                             isFocus: isFocus,
                             selected: selected,
@@ -489,20 +516,33 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
               left: 10,
               bottom: 10,
               child: Material(
-                color: AppTheme.card.withValues(alpha: 0.96),
+                color: theme.cardBg.withValues(alpha: 0.96),
                 elevation: 2,
                 borderRadius: BorderRadius.circular(10),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _LegendRow(color: Color(0xFF2563EB), label: 'Parent–child'),
-                      SizedBox(height: 4),
-                      _LegendRow(color: Color(0xFFE11D48), label: 'Spouse'),
-                      SizedBox(height: 4),
-                      _LegendRow(color: Color(0xFF7C3AED), label: 'Siblings'),
+                      _LegendRow(
+                        color: theme.lines.parent,
+                        label: 'Parent–child',
+                        textColor: theme.cardMuted,
+                      ),
+                      const SizedBox(height: 4),
+                      _LegendRow(
+                        color: theme.lines.spouse,
+                        label: 'Spouse',
+                        textColor: theme.cardMuted,
+                      ),
+                      const SizedBox(height: 4),
+                      _LegendRow(
+                        color: theme.lines.sibling,
+                        label: 'Siblings',
+                        textColor: theme.cardMuted,
+                      ),
                     ],
                   ),
                 ),
@@ -513,7 +553,7 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
               right: 10,
               bottom: 10,
               child: Material(
-                color: AppTheme.card.withValues(alpha: 0.96),
+                color: theme.cardBg.withValues(alpha: 0.96),
                 elevation: 3,
                 borderRadius: BorderRadius.circular(12),
                 child: Padding(
@@ -525,16 +565,17 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
                         tooltip: 'Zoom out',
                         visualDensity: VisualDensity.compact,
                         onPressed: () => _setZoom(_zoom - 0.15),
-                        icon: const Icon(Icons.remove, size: 18),
+                        icon: Icon(Icons.remove, size: 18, color: theme.cardText),
                       ),
                       SizedBox(
                         width: 44,
                         child: Text(
                           '${(_zoom * 100).round()}%',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
+                            color: theme.cardText,
                           ),
                         ),
                       ),
@@ -542,12 +583,12 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
                         tooltip: 'Zoom in',
                         visualDensity: VisualDensity.compact,
                         onPressed: () => _setZoom(_zoom + 0.15),
-                        icon: const Icon(Icons.add, size: 18),
+                        icon: Icon(Icons.add, size: 18, color: theme.cardText),
                       ),
                       Container(
                         width: 1,
                         height: 26,
-                        color: AppTheme.borderSoft,
+                        color: theme.cardBorder,
                       ),
                       TextButton(
                         onPressed: () => _fitToViewport(force: true),
@@ -566,6 +607,7 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
               ),
             ),
           ],
+        ),
         );
       },
     );
@@ -584,10 +626,15 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
 }
 
 class _LegendRow extends StatelessWidget {
-  const _LegendRow({required this.color, required this.label});
+  const _LegendRow({
+    required this.color,
+    required this.label,
+    this.textColor = const Color(0xFF475569),
+  });
 
   final Color color;
   final String label;
+  final Color textColor;
 
   @override
   Widget build(BuildContext context) {
@@ -605,10 +652,10 @@ class _LegendRow extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 10,
             fontWeight: FontWeight.w700,
-            color: Color(0xFF475569),
+            color: textColor,
           ),
         ),
       ],
@@ -659,12 +706,6 @@ Map<String, dynamic> _normalizeRelationship(Map<String, dynamic> rel) {
   };
 }
 
-Color _parseHex(String hex) {
-  var value = hex.replaceAll('#', '');
-  if (value.length == 6) value = 'FF$value';
-  return Color(int.parse(value, radix: 16));
-}
-
 class _MemberNode extends StatelessWidget {
   const _MemberNode({
     required this.member,
@@ -673,6 +714,7 @@ class _MemberNode extends StatelessWidget {
     required this.selected,
     required this.canAdd,
     required this.showExpand,
+    this.theme,
     this.treeRole,
     this.onTap,
     this.onAdd,
@@ -682,6 +724,7 @@ class _MemberNode extends StatelessWidget {
   });
 
   final FamilyMember member;
+  final TreeTheme? theme;
   final String? treeRole;
   final bool isMe;
   final bool isFocus;
@@ -708,8 +751,25 @@ class _MemberNode extends StatelessWidget {
     return 'Family';
   }
 
+  String get _cardDetail {
+    final map = <String, dynamic>{
+      'id': member.id,
+      'name': member.name,
+      'relationship': member.relationship,
+      'occupation': member.profileInfo['occupation'],
+      'education': member.profileInfo['education'],
+      'educations': member.profileInfo['educations'],
+      'jobs': member.profileInfo['jobs'],
+      'treeCardShow': member.profileInfo['treeCardShow'] ??
+          member.profileInfo['tree_card_show'],
+      'profileInfo': member.profileInfo,
+    };
+    return treeCardDetailLabel(map);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = this.theme ?? getTreeTheme(defaultTreeThemeId);
     final photo = mediaUrl(member.avatar);
     final pending =
         member.invitePending || (member.status ?? '').toLowerCase().contains('pending');
@@ -722,14 +782,18 @@ class _MemberNode extends StatelessWidget {
                 ? const Color(0xFF38BDF8)
                 : pending
                     ? const Color(0xFFFECACA)
-                    : AppTheme.border;
+                    : theme.cardBorder;
 
     return Material(
       color: Colors.transparent,
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFFECFDF5) : AppTheme.card,
+          color: selected
+              ? (theme.mode == 'dark'
+                  ? const Color(0xFF14532D)
+                  : const Color(0xFFECFDF5))
+              : theme.cardBg,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: borderColor,
@@ -810,7 +874,7 @@ class _MemberNode extends StatelessWidget {
                                     fontSize: 14,
                                     color: pending
                                         ? const Color(0xFF9F1239)
-                                        : const Color(0xFF1E293B),
+                                        : theme.cardText,
                                   ),
                                 ),
                               ),
@@ -889,9 +953,22 @@ class _MemberNode extends StatelessWidget {
                               fontWeight: FontWeight.w700,
                               color: isFocus && !isMe
                                   ? const Color(0xFF0284C7)
-                                  : const Color(0xFF1E40AF),
+                                  : theme.cardMuted,
                             ),
                           ),
+                          if (_cardDetail.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              _cardDetail,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: theme.cardMuted,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -997,18 +1074,25 @@ class _NodeAction extends StatelessWidget {
 }
 
 class _LayoutEdgePainter extends CustomPainter {
-  _LayoutEdgePainter(this.edges);
+  _LayoutEdgePainter(this.edges, {this.lines});
 
   final List<LayoutEdge> edges;
+  final TreeThemeLines? lines;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final themeLines = lines ??
+        const TreeThemeLines(
+          spouse: Color(0xFFE11D48),
+          sibling: Color(0xFF7C3AED),
+          parent: Color(0xFF2563EB),
+        );
     for (final edge in edges) {
       if (edge.points.length < 2) continue;
       final color = switch (edge.kind) {
-        'spouse' => const Color(0xFFE11D48).withValues(alpha: 0.8),
-        'sibling' => const Color(0xFF7C3AED).withValues(alpha: 0.8),
-        _ => const Color(0xFF2563EB).withValues(alpha: 0.78),
+        'spouse' => themeLines.spouse.withValues(alpha: 0.8),
+        'sibling' => themeLines.sibling.withValues(alpha: 0.8),
+        _ => themeLines.parent.withValues(alpha: 0.78),
       };
       final paint = Paint()
         ..color = color
@@ -1026,5 +1110,5 @@ class _LayoutEdgePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _LayoutEdgePainter oldDelegate) =>
-      oldDelegate.edges != edges;
+      oldDelegate.edges != edges || oldDelegate.lines != lines;
 }

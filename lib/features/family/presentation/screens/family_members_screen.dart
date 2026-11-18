@@ -49,6 +49,7 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
   bool _loading = true;
   bool _linkBusy = false;
   String? _error;
+  String? _loadedFamilyId;
 
   bool get _isAdmin =>
       _computeIsAdmin(context.read<FamilySessionProvider>());
@@ -101,6 +102,7 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
     try {
       final api = context.read<FamilyApiService>();
       final membersRes = await api.listFamilyMembers(familyId);
+      if (!mounted) return;
       final mdata = membersRes.data;
       List list = const [];
       List pending = const [];
@@ -112,14 +114,27 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
       } else if (mdata is List) {
         list = mdata;
       }
-      final parsedMembers = list
-          .whereType<Map>()
-          .map((e) => FamilyMember.fromJson(Map<String, dynamic>.from(e)))
-          .toList();
+      final parsedMembers = <FamilyMember>[];
+      for (final raw in list.whereType<Map>()) {
+        try {
+          parsedMembers
+              .add(FamilyMember.fromJson(Map<String, dynamic>.from(raw)));
+        } catch (_) {}
+      }
       final parsedPending = pending
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
+
+      // Show members immediately (web ActiveMembersTable parity) — don't wait
+      // on slow tree/join/link side-loads.
+      setState(() {
+        _members = parsedMembers;
+        _pendingInvites = parsedPending;
+        _loadedFamilyId = familyId;
+        _loading = false;
+        _error = null;
+      });
 
       var joinRequests = const <Map<String, dynamic>>[];
       try {
@@ -217,14 +232,10 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
 
       if (!mounted) return;
       setState(() {
-        _members = parsedMembers;
-        _pendingInvites = parsedPending;
         _joinRequests = joinRequests;
         _myInvites = myInvites;
         _linkRequests = linkRequests;
         _displayRoles = roles;
-        _loading = false;
-        _error = null;
       });
     } catch (e) {
       if (!mounted) return;
@@ -443,6 +454,8 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
     var isAlive = true;
     var dob = '';
     var withMobile = true;
+    var phoneHint = '';
+    var phoneBlocked = false;
 
     final ok = await showModalBottomSheet<bool>(
       context: context,
@@ -454,6 +467,53 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
         builder: (ctx, setLocal) {
           final age = _ageFromDob(dob);
           final isMinor = age != null && age < 18;
+
+          Future<void> checkPhone() async {
+            final p = phone.text.replaceAll(RegExp(r'\D'), '');
+            if (!RegExp(r'^[6-9]\d{9}$').hasMatch(p)) {
+              setLocal(() {
+                phoneHint = '';
+                phoneBlocked = false;
+              });
+              return;
+            }
+            try {
+              final res = await context
+                  .read<FamilyApiService>()
+                  .checkMemberPhone(familyId, p);
+              final data = res.data is Map
+                  ? Map<String, dynamic>.from(res.data as Map)
+                  : <String, dynamic>{};
+              final message = (data['message'] ?? '').toString();
+              if (data['alreadyMember'] == true ||
+                  data['pendingInvitation'] == true) {
+                setLocal(() {
+                  phoneBlocked = true;
+                  phoneHint = message.isNotEmpty
+                      ? message
+                      : 'This mobile number is already in use.';
+                });
+              } else if (data['exists'] == true) {
+                setLocal(() {
+                  phoneBlocked = false;
+                  phoneHint = message.isNotEmpty
+                      ? message
+                      : 'This mobile is already registered — OTP invite will be sent.';
+                });
+              } else {
+                setLocal(() {
+                  phoneBlocked = false;
+                  phoneHint = '';
+                });
+              }
+            } catch (e) {
+              setLocal(() {
+                phoneBlocked = false;
+                phoneHint = e.toString();
+              });
+            }
+          }
+
           return Padding(
             padding: EdgeInsets.only(
               left: 16,
@@ -567,9 +627,26 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
                         controller: phone,
                         keyboardType: TextInputType.phone,
                         maxLength: 10,
-                        decoration: const InputDecoration(
+                        onChanged: (_) => setLocal(() {
+                          phoneHint = '';
+                          phoneBlocked = false;
+                        }),
+                        onEditingComplete: checkPhone,
+                        decoration: InputDecoration(
                           labelText: 'Mobile (+91)',
-                          counterText: '',
+                          counterText: '${phone.text.length}/10',
+                          errorText: phoneBlocked ? phoneHint : null,
+                          helperText: !phoneBlocked && phoneHint.isNotEmpty
+                              ? phoneHint
+                              : null,
+                          helperMaxLines: 2,
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton(
+                          onPressed: checkPhone,
+                          child: const Text('Check mobile'),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -595,7 +672,9 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      onPressed: () => Navigator.pop(ctx, true),
+                      onPressed: phoneBlocked
+                          ? null
+                          : () => Navigator.pop(ctx, true),
                       child: Text(
                         !isAlive
                             ? 'Save memorial'
@@ -669,6 +748,18 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
             );
             return;
           }
+          if (phoneBlocked) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  phoneHint.isNotEmpty
+                      ? phoneHint
+                      : 'This mobile number cannot be used.',
+                ),
+              ),
+            );
+            return;
+          }
           await api.addFamilyMemberWithOtp(familyId, {
             'name': name.text.trim(),
             'phone': p,
@@ -698,6 +789,16 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
     final session = context.watch<FamilySessionProvider>();
     final activeCount = _members.length;
     final familyName = session.current?.name ?? 'Your family';
+    // If user switched family from another tab, refresh this list.
+    final sid = session.familyId;
+    if (sid != null &&
+        sid != _loadedFamilyId &&
+        !_loading &&
+        _loadedFamilyId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _load();
+      });
+    }
 
     return FtPage(
       title: 'Members',

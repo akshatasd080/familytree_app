@@ -33,9 +33,20 @@ class _FamilyEventsScreenState extends State<FamilyEventsScreen> {
   List<FamilyMember> _members = const [];
   bool _loading = true;
   bool _canAdd = true;
+  bool _isAdmin = false;
+  String? _myMemberId;
   String? _error;
   DateTime _month = DateTime(DateTime.now().year, DateTime.now().month);
   DateTime? _selectedDay;
+
+  bool _canManage(Map<String, dynamic> event) => event['canManage'] == true;
+
+  List<FamilyMember> get _memberChoices {
+    if (_isAdmin) return _members;
+    final me = _myMemberId;
+    if (me == null || me.isEmpty) return const [];
+    return _members.where((m) => m.id == me).toList();
+  }
 
   @override
   void initState() {
@@ -109,9 +120,11 @@ class _FamilyEventsScreenState extends State<FamilyEventsScreen> {
       final data = results[0].data;
       List list = const [];
       var canAdd = true;
+      var isAdmin = false;
       if (data is Map) {
         if (data['events'] is List) list = data['events'] as List;
         if (data['canAdd'] == false) canAdd = false;
+        isAdmin = data['isAdmin'] == true;
       } else if (data is List) {
         list = data;
       }
@@ -127,8 +140,19 @@ class _FamilyEventsScreenState extends State<FamilyEventsScreen> {
           .map((e) => FamilyMember.fromJson(Map<String, dynamic>.from(e)))
           .toList();
       final byId = {for (final m in members) m.id: m};
+      final meUserId = context.read<AuthProvider>().user?.id;
+      String? myMemberId;
+      for (final m in members) {
+        if (meUserId != null &&
+            (m.userId == meUserId || m.id == meUserId)) {
+          myMemberId = m.id;
+          break;
+        }
+      }
       setState(() {
         _members = members;
+        _myMemberId = myMemberId;
+        _isAdmin = isAdmin;
         _events = list.whereType<Map>().map((e) {
           final map = Map<String, dynamic>.from(e);
           final memberId =
@@ -154,7 +178,8 @@ class _FamilyEventsScreenState extends State<FamilyEventsScreen> {
   }
 
   Future<void> _openEditor({Map<String, dynamic>? existing}) async {
-    if (!_canAdd && existing == null) return;
+    if (existing == null && !_canAdd) return;
+    if (existing != null && !_canManage(existing)) return;
     final familyId = context.read<FamilySessionProvider>().familyId;
     if (familyId == null) return;
 
@@ -173,6 +198,10 @@ class _FamilyEventsScreenState extends State<FamilyEventsScreen> {
         kind == 'anniversary';
     String? memberId =
         (existing?['memberId'] ?? existing?['member_id'])?.toString();
+    if (!_isAdmin) {
+      memberId = _myMemberId ?? memberId;
+    }
+    final choices = _memberChoices;
 
     final ok = await showModalBottomSheet<bool>(
       context: context,
@@ -240,16 +269,27 @@ class _FamilyEventsScreenState extends State<FamilyEventsScreen> {
                 ),
                 DropdownButtonFormField<String?>(
                   value: memberId,
-                  decoration: const InputDecoration(labelText: 'Member'),
+                  decoration: InputDecoration(
+                    labelText: 'Member',
+                    helperText: _isAdmin
+                        ? 'Optional'
+                        : 'You can only create events for yourself',
+                  ),
                   items: [
-                    const DropdownMenuItem(
-                      value: null,
-                      child: Text('None'),
-                    ),
-                    for (final m in _members)
-                      DropdownMenuItem(value: m.id, child: Text(m.name)),
+                    if (_isAdmin)
+                      const DropdownMenuItem(
+                        value: null,
+                        child: Text('None'),
+                      ),
+                    for (final m in choices)
+                      DropdownMenuItem(
+                        value: m.id,
+                        child: Text(_isAdmin ? m.name : 'You'),
+                      ),
                   ],
-                  onChanged: (v) => setLocal(() => memberId = v),
+                  onChanged: _isAdmin
+                      ? (v) => setLocal(() => memberId = v)
+                      : null,
                 ),
                 const SizedBox(height: 10),
                 TextField(
@@ -260,7 +300,7 @@ class _FamilyEventsScreenState extends State<FamilyEventsScreen> {
                 const SizedBox(height: 14),
                 Row(
                   children: [
-                    if (existing != null)
+                    if (existing != null && _canManage(existing))
                       TextButton(
                         onPressed: () async {
                           final id = (existing['id'] ?? '').toString();
@@ -294,13 +334,15 @@ class _FamilyEventsScreenState extends State<FamilyEventsScreen> {
     );
 
     if (ok != true || !mounted) return;
+    final lockedMemberId = _isAdmin ? memberId : (_myMemberId ?? memberId);
     final payload = {
       'title': title.text.trim().isEmpty ? kind : title.text.trim(),
       'kind': kind,
       'eventDate': DateFormat('yyyy-MM-dd').format(date),
       'repeatsYearly': repeats,
       'notes': notes.text.trim(),
-      if (memberId != null) 'memberId': memberId,
+      if (lockedMemberId != null && lockedMemberId.isNotEmpty)
+        'memberId': lockedMemberId,
     };
     try {
       final api = context.read<FamilyApiService>();
@@ -647,7 +689,9 @@ class _FamilyEventsScreenState extends State<FamilyEventsScreen> {
                                 icon: const Icon(Icons.favorite_outline),
                               )
                             : null,
-                        onTap: () => _openEditor(existing: e),
+                        onTap: _canManage(e)
+                            ? () => _openEditor(existing: e)
+                            : null,
                       ),
                     );
                   }),
@@ -676,7 +720,9 @@ class _FamilyEventsScreenState extends State<FamilyEventsScreen> {
                               icon: const Icon(Icons.favorite_outline),
                             )
                           : null,
-                      onTap: () => _openEditor(existing: e),
+                      onTap: _canManage(e)
+                          ? () => _openEditor(existing: e)
+                          : null,
                     );
                   }),
                   const SizedBox(height: 80),

@@ -9,6 +9,7 @@ import '../../../../core/widgets/ft_page.dart';
 import '../../../../core/widgets/responsive.dart';
 import '../../data/family_api_service.dart';
 import '../../domain/profile_privacy.dart';
+import '../widgets/phone_change_otp_dialog.dart';
 import '../widgets/state_city_select.dart';
 
 const _bloodGroups = [
@@ -39,6 +40,7 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
   String? _dob;
   String? _marriage;
   String _blood = 'Unknown';
+  String _treeCardShow = 'education';
   String? _avatar;
   Map<String, String> _privacy = normalizePrivacy(const {});
   final List<_PairFields> _educations = [];
@@ -46,6 +48,7 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
   bool _loading = true;
   bool _saving = false;
   String? _error;
+  String _savedPhone = '';
 
   @override
   void initState() {
@@ -122,6 +125,7 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
       if (_phone.text.length > 10) {
         _phone.text = _phone.text.substring(_phone.text.length - 10);
       }
+      _savedPhone = _phone.text;
       final loc = (profile['location'] ?? '').toString();
       if (loc.isNotEmpty) {
         _location.text = loc;
@@ -137,6 +141,13 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
       final bg = (profile['bloodGroup'] ?? profile['blood_group'] ?? 'Unknown')
           .toString();
       _blood = _bloodGroups.contains(bg) ? bg : 'Unknown';
+      _treeCardShow =
+          (profile['treeCardShow'] ?? profile['tree_card_show'] ?? 'education')
+                      .toString()
+                      .toLowerCase() ==
+                  'job'
+              ? 'job'
+              : 'education';
       _avatar = (profile['avatar'] ?? data['avatar'])?.toString();
       _privacy = normalizePrivacy(profile['privacy'] ?? data['privacy']);
 
@@ -177,6 +188,34 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
     }
   }
 
+  Future<void> _persistProfile(String phone) async {
+    final name = _name.text.trim();
+    await context.read<FamilyApiService>().updateMyFamilyProfile({
+      'name': name,
+      if (_email.text.trim().isNotEmpty)
+        'email': _email.text.trim().toLowerCase(),
+      'phone': phone,
+      'location': _location.text.trim(),
+      if (_dob != null) 'dateOfBirth': _dob,
+      if (_marriage != null) 'dateOfMarriage': _marriage,
+      'bloodGroup': _blood,
+      'about': _about.text.trim(),
+      'treeCardShow': _treeCardShow,
+      'educations': [
+        for (final e in _educations)
+          if (e.a.text.trim().isNotEmpty || e.b.text.trim().isNotEmpty)
+            {'course': e.a.text.trim(), 'school': e.b.text.trim()},
+      ],
+      'jobs': [
+        for (final j in _jobs)
+          if (j.a.text.trim().isNotEmpty || j.b.text.trim().isNotEmpty)
+            {'title': j.a.text.trim(), 'place': j.b.text.trim()},
+      ],
+      'privacy': _privacy,
+    });
+    _savedPhone = phone;
+  }
+
   Future<void> _save() async {
     final name = _name.text.trim();
     final phone = _phone.text.replaceAll(RegExp(r'\D'), '');
@@ -184,37 +223,56 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
       setState(() => _error = 'Enter a valid name.');
       return;
     }
-    if (phone.isNotEmpty && !RegExp(r'^[6-9]\d{9}$').hasMatch(phone)) {
+    if (!RegExp(r'^[6-9]\d{9}$').hasMatch(phone)) {
       setState(() => _error = 'Enter a valid 10-digit mobile number.');
       return;
     }
+
+    // Login mobile changes only after OTP verify (matches web + backend).
+    if (_savedPhone.isNotEmpty && phone != _savedPhone) {
+      final api = context.read<FamilyApiService>();
+      final verified = await showPhoneChangeOtpDialog(
+        context: context,
+        phone: phone,
+        description:
+            'OTP will be sent to +91 $phone. After verify, use this number to login.',
+        onRequestOtp: (p) async {
+          await api.requestMyPhoneChangeOtp(p);
+        },
+        onVerifyOtp: (p, otp) async {
+          await api.verifyMyPhoneChangeOtp(p, otp);
+        },
+      );
+      if (!mounted) return;
+      if (!verified) {
+        setState(() => _phone.text = _savedPhone);
+        return;
+      }
+      setState(() {
+        _phone.text = phone;
+        _saving = true;
+        _error = null;
+      });
+      try {
+        await _persistProfile(phone);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Mobile updated and profile saved')),
+        );
+      } catch (e) {
+        setState(() => _error = e.toString());
+      } finally {
+        if (mounted) setState(() => _saving = false);
+      }
+      return;
+    }
+
     setState(() {
       _saving = true;
       _error = null;
     });
     try {
-      await context.read<FamilyApiService>().updateMyFamilyProfile({
-        'name': name,
-        if (_email.text.trim().isNotEmpty)
-          'email': _email.text.trim().toLowerCase(),
-        'phone': phone,
-        'location': _location.text.trim(),
-        if (_dob != null) 'dateOfBirth': _dob,
-        if (_marriage != null) 'dateOfMarriage': _marriage,
-        'bloodGroup': _blood,
-        'about': _about.text.trim(),
-        'educations': [
-          for (final e in _educations)
-            if (e.a.text.trim().isNotEmpty || e.b.text.trim().isNotEmpty)
-              {'course': e.a.text.trim(), 'school': e.b.text.trim()},
-        ],
-        'jobs': [
-          for (final j in _jobs)
-            if (j.a.text.trim().isNotEmpty || j.b.text.trim().isNotEmpty)
-              {'title': j.a.text.trim(), 'place': j.b.text.trim()},
-        ],
-        'privacy': _privacy,
-      });
+      await _persistProfile(phone);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profile saved')),
@@ -353,11 +411,13 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
                     controller: _phone,
                     keyboardType: TextInputType.phone,
                     maxLength: 10,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Phone',
-                      counterText: '',
-                      helperText: 'Private = only you see it',
+                      counterText: '${_phone.text.length}/10',
+                      helperText:
+                          'Changing number needs OTP on the new mobile',
                     ),
+                    onChanged: (_) => setState(() {}),
                   ),
                   const SizedBox(height: 10),
                   StateCitySelect(
@@ -512,6 +572,48 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
                       ),
                     );
                   }),
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 12, top: 4),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppTheme.borderSoft),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Show on family tree',
+                          style: AppTheme.body(weight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Choose education or job under your name on the tree card.',
+                          style: AppTheme.body(size: 12, color: AppTheme.muted),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            ChoiceChip(
+                              label: const Text('Education'),
+                              selected: _treeCardShow == 'education',
+                              onSelected: (_) =>
+                                  setState(() => _treeCardShow = 'education'),
+                            ),
+                            ChoiceChip(
+                              label: const Text('Job'),
+                              selected: _treeCardShow == 'job',
+                              onSelected: (_) =>
+                                  setState(() => _treeCardShow = 'job'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
                   if (_error != null) ...[
                     const SizedBox(height: 8),
                     Text(_error!, style: AppTheme.body(color: Colors.red)),

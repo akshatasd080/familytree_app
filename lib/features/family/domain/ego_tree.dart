@@ -1538,3 +1538,57 @@ List<MemberMap> filterMembersByGeneration(
     return false;
   }).toList();
 }
+
+String normalizeTreeCardShow(dynamic value) =>
+    (value ?? '').toString().toLowerCase() == 'job' ? 'job' : 'education';
+
+/// Label shown under role on tree cards (education name or job title).
+String treeCardDetailLabel(MemberMap member) {
+  final info = _profileOf(member);
+  final prefer = normalizeTreeCardShow(
+    member['treeCardShow'] ?? info['treeCardShow'] ?? info['tree_card_show'],
+  );
+
+  List listOf(dynamic raw) => raw is List ? raw : const [];
+
+  final educations = listOf(member['educations']).isNotEmpty
+      ? listOf(member['educations'])
+      : listOf(info['educations']);
+  final jobs = listOf(member['jobs']).isNotEmpty
+      ? listOf(member['jobs'])
+      : listOf(info['jobs']);
+
+  Map? firstEdu;
+  for (final row in educations.whereType<Map>()) {
+    if ((row['course'] ?? row['school'] ?? '').toString().trim().isNotEmpty) {
+      firstEdu = row;
+      break;
+    }
+  }
+  final eduLabel = firstEdu != null
+      ? (firstEdu['course'] ?? firstEdu['school'] ?? '').toString().trim()
+      : (member['education'] ?? info['education'] ?? '')
+          .toString()
+          .split(RegExp(r'[,;]'))
+          .first
+          .trim();
+
+  Map? firstJob;
+  for (final row in jobs.whereType<Map>()) {
+    if ((row['title'] ?? row['place'] ?? '').toString().trim().isNotEmpty) {
+      firstJob = row;
+      break;
+    }
+  }
+  final jobLabel = (firstJob?['title'] ??
+          member['occupation'] ??
+          info['occupation'] ??
+          '')
+      .toString()
+      .trim();
+
+  if (prefer == 'job') {
+    return jobLabel.isNotEmpty ? jobLabel : eduLabel;
+  }
+  return eduLabel.isNotEmpty ? eduLabel : jobLabel;
+}

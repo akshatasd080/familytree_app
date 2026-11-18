@@ -166,6 +166,36 @@ class FamilyApiService {
   Future<Response> updateMyFamilyProfile(Map<String, dynamic> payload) =>
       _api.put('/families/profile/me', data: payload);
 
+  Future<Response> requestMyPhoneChangeOtp(String phone) =>
+      _api.post('/families/profile/phone/request-otp', data: {'phone': phone});
+
+  Future<Response> verifyMyPhoneChangeOtp(String phone, String otp) =>
+      _api.post(
+        '/families/profile/phone/verify-otp',
+        data: {'phone': phone, 'otp': otp},
+      );
+
+  Future<Response> requestMemberPhoneChangeOtp(
+    String familyId,
+    String memberId,
+    String phone,
+  ) =>
+      _api.post(
+        '/families/$familyId/members/$memberId/phone/request-otp',
+        data: {'phone': phone},
+      );
+
+  Future<Response> verifyMemberPhoneChangeOtp(
+    String familyId,
+    String memberId,
+    String phone,
+    String otp,
+  ) =>
+      _api.post(
+        '/families/$familyId/members/$memberId/phone/verify-otp',
+        data: {'phone': phone, 'otp': otp},
+      );
+
   Future<Response> uploadMyFamilyAvatar(String filePath) {
     final form = FormData.fromMap({
       'avatar': MultipartFile.fromFileSync(filePath),
@@ -185,12 +215,13 @@ class FamilyApiService {
 
   Future<Response> uploadFamilyMedia(
     String familyId, {
-    required String filePath,
+    String? filePath,
     String? caption,
   }) {
     final form = FormData.fromMap({
-      'image': MultipartFile.fromFileSync(filePath),
-      if (caption != null) 'caption': caption,
+      if (filePath != null && filePath.isNotEmpty)
+        'image': MultipartFile.fromFileSync(filePath),
+      if (caption != null && caption.trim().isNotEmpty) 'caption': caption.trim(),
     });
     return _api.post(
       '/families/$familyId/media',
