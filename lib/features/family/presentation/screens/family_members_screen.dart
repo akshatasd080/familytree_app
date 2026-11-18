@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../app/theme.dart';
@@ -49,7 +50,6 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
   bool _loading = true;
   bool _linkBusy = false;
   String? _error;
-  String? _loadedFamilyId;
 
   bool get _isAdmin =>
       _computeIsAdmin(context.read<FamilySessionProvider>());
@@ -83,166 +83,194 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
     }).toList();
   }
 
+  List _asList(dynamic data, [String? key]) {
+    if (data is List) return data;
+    if (data is Map && key != null && data[key] is List) {
+      return data[key] as List;
+    }
+    return const [];
+  }
+
+  Map<String, dynamic>? _asMap(dynamic value) {
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return null;
+  }
+
   Future<void> _load() async {
     final session = context.read<FamilySessionProvider>();
-    if (session.familyId == null) await session.loadMine();
+    final api = context.read<FamilyApiService>();
+
+    // Web parity: ensure /families/mine is loaded before members.
+    if (session.familyId == null || session.families.isEmpty) {
+      await session.loadMine();
+    }
     if (!mounted) return;
+
     final familyId = session.familyId;
     if (familyId == null) {
       setState(() {
+        _members = const [];
+        _pendingInvites = const [];
+        _joinRequests = const [];
+        _myInvites = const [];
+        _linkRequests = const [];
         _loading = false;
-        _error = 'No family';
+        _error = 'No family found. Register a family to get started.';
       });
       return;
     }
+
     setState(() {
       _loading = true;
       _error = null;
     });
+
     try {
-      final api = context.read<FamilyApiService>();
       final membersRes = await api.listFamilyMembers(familyId);
       if (!mounted) return;
       final mdata = membersRes.data;
-      List list = const [];
-      List pending = const [];
-      if (mdata is Map) {
-        if (mdata['members'] is List) list = mdata['members'] as List;
-        if (mdata['pendingInvitations'] is List) {
-          pending = mdata['pendingInvitations'] as List;
-        }
-      } else if (mdata is List) {
-        list = mdata;
-      }
+      final list = _asList(mdata, 'members');
+      final pending = _asList(mdata, 'pendingInvitations');
+
       final parsedMembers = <FamilyMember>[];
-      for (final raw in list.whereType<Map>()) {
+      var parseFailures = 0;
+      for (final raw in list) {
+        final map = _asMap(raw);
+        if (map == null) {
+          parseFailures++;
+          continue;
+        }
         try {
-          parsedMembers
-              .add(FamilyMember.fromJson(Map<String, dynamic>.from(raw)));
-        } catch (_) {}
+          parsedMembers.add(FamilyMember.fromJson(map));
+        } catch (e) {
+          parseFailures++;
+          debugPrint('Members parse failed: $e for $map');
+        }
       }
       final parsedPending = pending
-          .whereType<Map>()
-          .map((e) => Map<String, dynamic>.from(e))
+          .map(_asMap)
+          .whereType<Map<String, dynamic>>()
           .toList();
 
-      // Show members immediately (web ActiveMembersTable parity) — don't wait
-      // on slow tree/join/link side-loads.
+      if (kDebugMode) {
+        debugPrint(
+          'Members loaded: ${parsedMembers.length} '
+          '(raw=${list.length}, parseFail=$parseFailures) family=$familyId',
+        );
+      }
+
+      // Show Active members immediately — same as web ActiveMembersTable.
       setState(() {
         _members = parsedMembers;
         _pendingInvites = parsedPending;
-        _loadedFamilyId = familyId;
         _loading = false;
-        _error = null;
+        _error = parseFailures > 0 && parsedMembers.isEmpty
+            ? 'Could not read members from server ($parseFailures rows).'
+            : null;
       });
 
-      var joinRequests = const <Map<String, dynamic>>[];
-      try {
-        final joins = await api.listFamilyJoinRequests(familyId);
-        final jdata = joins.data;
-        List jlist = const [];
-        if (jdata is Map && jdata['requests'] is List) {
-          jlist = jdata['requests'] as List;
-        } else if (jdata is List) {
-          jlist = jdata;
-        }
-        joinRequests = jlist
-            .whereType<Map>()
-            .map((e) => Map<String, dynamic>.from(e))
-            .toList();
-      } catch (_) {}
-
-      var myInvites = const <Map<String, dynamic>>[];
-      try {
-        final mine = await api.listMyInvitations();
-        final idata = mine.data;
-        List ilist = const [];
-        if (idata is Map && idata['invitations'] is List) {
-          ilist = idata['invitations'] as List;
-        } else if (idata is List) {
-          ilist = idata;
-        }
-        myInvites = ilist
-            .whereType<Map>()
-            .map((e) => Map<String, dynamic>.from(e))
-            .toList();
-      } catch (_) {}
-
-      var linkRequests = const <Map<String, dynamic>>[];
-      final isAdmin = _computeIsAdmin(session);
-      if (isAdmin) {
-        try {
-          final links = await api.listFamilyLinkRequests(familyId);
-          final ldata = links.data;
-          List llist = const [];
-          if (ldata is Map && ldata['requests'] is List) {
-            llist = ldata['requests'] as List;
-          } else if (ldata is List) {
-            llist = ldata;
-          }
-          linkRequests = llist
-              .whereType<Map>()
-              .map((e) => Map<String, dynamic>.from(e))
+      // Side-loads (web does these too; failures must not blank the table).
+      final side = await Future.wait([
+        _safeList(() async {
+          final joins = await api.listFamilyJoinRequests(familyId);
+          return _asList(joins.data, 'requests')
+              .map(_asMap)
+              .whereType<Map<String, dynamic>>()
               .toList();
-        } catch (_) {}
-      }
-
-      // Web parity: ego-relative labels (You / Mother / …)
-      var roles = <String, String>{};
-      try {
-        final treeRes = await api.getFamilyTree(
-          familyId,
-          params: const {'scope': 'full'},
-        );
-        final tdata = treeRes.data is Map
-            ? Map<String, dynamic>.from(treeRes.data as Map)
-            : <String, dynamic>{};
-        final tMembers = (tdata['members'] is List)
-            ? (tdata['members'] as List)
-                .whereType<Map>()
-                .map((e) => Map<String, dynamic>.from(e))
-                .toList()
-            : parsedMembers
-                .map(
-                  (m) => {
-                    'id': m.id,
-                    'userId': m.userId,
-                    'name': m.name,
-                    'gender': m.gender,
-                    'relationship': m.relationship,
-                  },
-                )
-                .toList();
-        final tRels = (tdata['relationships'] is List)
-            ? (tdata['relationships'] as List)
-                .whereType<Map>()
-                .map((e) => Map<String, dynamic>.from(e))
-                .toList()
-            : <Map<String, dynamic>>[];
-        final focusId = context.read<AuthProvider>().user?.id;
-        final layout = buildFamilyLayout(tMembers, tRels, focusId);
-        for (final node in layout.nodes) {
-          final id = node['id']?.toString();
-          final role = node['treeRole']?.toString();
-          if (id != null && role != null && role.trim().isNotEmpty) {
-            roles[id] = role.trim();
-          }
-        }
-      } catch (_) {}
+        }),
+        _safeList(() async {
+          final mine = await api.listMyInvitations();
+          return _asList(mine.data, 'invitations')
+              .map(_asMap)
+              .whereType<Map<String, dynamic>>()
+              .toList();
+        }),
+        _safeList(() async {
+          if (!_computeIsAdmin(session)) return const <Map<String, dynamic>>[];
+          final links = await api.listFamilyLinkRequests(familyId);
+          return _asList(links.data, 'requests')
+              .map(_asMap)
+              .whereType<Map<String, dynamic>>()
+              .toList();
+        }),
+        _loadDisplayRoles(api, familyId, parsedMembers),
+      ]);
 
       if (!mounted) return;
       setState(() {
-        _joinRequests = joinRequests;
-        _myInvites = myInvites;
-        _linkRequests = linkRequests;
-        _displayRoles = roles;
+        _joinRequests = side[0] as List<Map<String, dynamic>>;
+        _myInvites = side[1] as List<Map<String, dynamic>>;
+        _linkRequests = side[2] as List<Map<String, dynamic>>;
+        _displayRoles = side[3] as Map<String, String>;
       });
     } catch (e) {
+      debugPrint('Members load failed: $e');
       if (!mounted) return;
       setState(() {
         _error = e.toString();
         _loading = false;
+        // Keep any previously shown members so the screen is never empty white.
       });
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _safeList(
+    Future<List<Map<String, dynamic>>> Function() run,
+  ) async {
+    try {
+      return await run();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<Map<String, String>> _loadDisplayRoles(
+    FamilyApiService api,
+    String familyId,
+    List<FamilyMember> parsedMembers,
+  ) async {
+    try {
+      final treeRes = await api.getFamilyTree(
+        familyId,
+        params: const {'scope': 'full'},
+      );
+      final tdata = _asMap(treeRes.data) ?? <String, dynamic>{};
+      final tMembers = _asList(tdata, 'members')
+          .map(_asMap)
+          .whereType<Map<String, dynamic>>()
+          .toList();
+      final graphMembers = tMembers.isNotEmpty
+          ? tMembers
+          : parsedMembers
+              .map(
+                (m) => {
+                  'id': m.id,
+                  'userId': m.userId,
+                  'name': m.name,
+                  'gender': m.gender,
+                  'relationship': m.relationship,
+                },
+              )
+              .toList();
+      final tRels = _asList(tdata, 'relationships')
+          .map(_asMap)
+          .whereType<Map<String, dynamic>>()
+          .toList();
+      if (!mounted) return const {};
+      final focusId = context.read<AuthProvider>().user?.id;
+      final layout = buildFamilyLayout(graphMembers, tRels, focusId);
+      final roles = <String, String>{};
+      for (final node in layout.nodes) {
+        final id = node['id']?.toString();
+        final role = node['treeRole']?.toString();
+        if (id != null && role != null && role.trim().isNotEmpty) {
+          roles[id] = role.trim();
+        }
+      }
+      return roles;
+    } catch (e) {
+      debugPrint('Members role labels failed: $e');
+      return const {};
     }
   }
 
@@ -789,23 +817,15 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
     final session = context.watch<FamilySessionProvider>();
     final activeCount = _members.length;
     final familyName = session.current?.name ?? 'Your family';
-    // If user switched family from another tab, refresh this list.
-    final sid = session.familyId;
-    if (sid != null &&
-        sid != _loadedFamilyId &&
-        !_loading &&
-        _loadedFamilyId != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _load();
-      });
-    }
+    final familyId = session.familyId;
+    final isAdmin = _computeIsAdmin(session);
 
     return FtPage(
       title: 'Members',
       actions: [
         IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
       ],
-      floatingActionButton: _isAdmin
+      floatingActionButton: isAdmin
           ? FloatingActionButton.extended(
               onPressed: _addMember,
               backgroundColor: AppTheme.forest,
@@ -854,11 +874,58 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
               'Manage people, invites, and join requests for your tree.',
               style: AppTheme.body(size: 13, color: AppTheme.muted),
             ),
+            if (session.families.length > 1) ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                key: ValueKey('family-select-$familyId'),
+                initialValue: familyId,
+                decoration: const InputDecoration(
+                  labelText: 'Family',
+                  isDense: true,
+                ),
+                items: [
+                  for (final f in session.families)
+                    DropdownMenuItem(value: f.id, child: Text(f.name)),
+                ],
+                onChanged: (id) {
+                  if (id == null) return;
+                  final match = session.families.where((f) => f.id == id);
+                  if (match.isEmpty) return;
+                  session.selectFamily(match.first);
+                  _load();
+                },
+              ),
+            ],
             if (_error != null) ...[
               const SizedBox(height: 10),
-              Text(_error!, style: const TextStyle(color: Colors.red)),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEE2E2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFFECACA)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _error!,
+                      style: AppTheme.body(
+                        size: 13,
+                        color: const Color(0xFFB91C1C),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton(
+                      onPressed: _load,
+                      child: const Text('Try again'),
+                    ),
+                  ],
+                ),
+              ),
             ],
-            if (_isAdmin) ...[
+            if (isAdmin && familyId != null) ...[
               const SizedBox(height: 16),
               _SectionCard(
                 child: Column(
@@ -994,37 +1061,39 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
                 ),
               ),
             ],
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: _StatCard(
-                    label: 'Active',
-                    value: '$activeCount',
-                    icon: Icons.groups,
-                    iconColor: AppTheme.emerald600,
+            if (familyId != null && !_loading) ...[
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: _StatCard(
+                      label: 'Active',
+                      value: '$activeCount',
+                      icon: Icons.groups,
+                      iconColor: AppTheme.emerald600,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _StatCard(
-                    label: 'Invites',
-                    value: '${_pendingInvites.length}',
-                    icon: Icons.mail_outline,
-                    iconColor: const Color(0xFFF59E0B),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _StatCard(
+                      label: 'Invites',
+                      value: '${_pendingInvites.length}',
+                      icon: Icons.mail_outline,
+                      iconColor: const Color(0xFFF59E0B),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _StatCard(
-                    label: 'Join requests',
-                    value: '${_joinRequests.length}',
-                    icon: Icons.person_add_alt_1_outlined,
-                    iconColor: const Color(0xFF0284C7),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _StatCard(
+                      label: 'Join requests',
+                      value: '${_joinRequests.length}',
+                      icon: Icons.person_add_alt_1_outlined,
+                      iconColor: const Color(0xFF0284C7),
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
             if (_myInvites.isNotEmpty) ...[
               const SizedBox(height: 14),
               _SectionCard(
@@ -1080,9 +1149,33 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
             ],
             const SizedBox(height: 14),
             if (_loading)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 48),
-                child: Center(child: CircularProgressIndicator()),
+              _SectionCard(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 40),
+                  child: Column(
+                    children: [
+                      const CircularProgressIndicator(),
+                      const SizedBox(height: 14),
+                      Text(
+                        'Loading members…',
+                        style: AppTheme.body(color: AppTheme.muted),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else if (familyId == null)
+              _SectionCard(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 40),
+                  child: Center(
+                    child: Text(
+                      'No family found. Register a family to get started.',
+                      textAlign: TextAlign.center,
+                      style: AppTheme.body(color: AppTheme.muted),
+                    ),
+                  ),
+                ),
               )
             else ...[
               _SectionCard(
@@ -1137,7 +1230,7 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
                         child: Center(
                           child: Text(
                             _members.isEmpty
-                                ? 'No members yet. Tap Add to invite someone.'
+                                ? 'No active members found.'
                                 : 'No members match your search.',
                             textAlign: TextAlign.center,
                             style: AppTheme.body(color: AppTheme.muted),
@@ -1180,8 +1273,7 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
                     else
                       ..._joinRequests.map((r) {
                         final id = (r['id'] ?? '').toString();
-                        final familyId =
-                            context.read<FamilySessionProvider>().familyId!;
+                        final reqFamilyId = familyId;
                         return Container(
                           margin: const EdgeInsets.only(bottom: 10),
                           padding: const EdgeInsets.fromLTRB(12, 10, 8, 8),
@@ -1212,7 +1304,7 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
                                       await context
                                           .read<FamilyApiService>()
                                           .approveFamilyJoinRequest(
-                                              familyId, id);
+                                              reqFamilyId, id);
                                       _load();
                                     },
                                     icon: const Icon(
@@ -1227,7 +1319,7 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
                                       await context
                                           .read<FamilyApiService>()
                                           .rejectFamilyJoinRequest(
-                                              familyId, id);
+                                              reqFamilyId, id);
                                       _load();
                                     },
                                     icon: const Icon(

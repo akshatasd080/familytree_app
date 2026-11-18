@@ -404,11 +404,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             'Tree',
                             () => context.openShell('/family/tree')
                           ),
-                          (
-                            Icons.groups,
-                            'Members',
-                            () => context.openShell('/family/members')
-                          ),
+                          // Members screen hidden for now
+                          // (
+                          //   Icons.groups,
+                          //   'Members',
+                          //   () => context.openShell('/family/members')
+                          // ),
                           (
                             Icons.photo_library,
                             'Media',

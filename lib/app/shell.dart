@@ -177,7 +177,8 @@ class _AppDrawer extends StatelessWidget {
               ),
               const Divider(),
               _item(context, Icons.dashboard, 'Dashboard', '/dashboard'),
-              _item(context, Icons.groups, 'Members', '/family/members'),
+              // Members screen hidden for now
+              // _item(context, Icons.groups, 'Members', '/family/members'),
               _item(context, Icons.account_tree, 'Tree', '/family/tree'),
               _item(context, Icons.photo_library, 'Media', '/family/media'),
               _item(
