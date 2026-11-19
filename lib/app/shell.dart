@@ -246,10 +246,6 @@ class _AppDrawer extends StatelessWidget {
                   'All Families',
                   '/admin/families',
                 ),
-              const SizedBox(height: 12),
-              _InviteBanner(
-                onInvite: () => _go(context, '/family/members'),
-              ),
             ],
           ),
         ),
@@ -515,75 +511,6 @@ class _DrawerHeader extends StatelessWidget {
               color: AppTheme.forestDark,
               weight: FontWeight.w600,
             ).copyWith(fontStyle: FontStyle.italic),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _InviteBanner extends StatelessWidget {
-  const _InviteBanner({required this.onInvite});
-
-  final VoidCallback onInvite;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE8F5E9),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFC8E6C9)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(Icons.account_tree_rounded, color: AppTheme.forest),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Keep Your Family Connected',
-                  style: AppTheme.body(
-                    size: 12,
-                    weight: FontWeight.w800,
-                    color: AppTheme.forestDark,
-                  ),
-                ),
-                Text(
-                  'Grow Together, Always…',
-                  style: AppTheme.body(
-                    size: 11,
-                    color: AppTheme.muted,
-                  ).copyWith(fontStyle: FontStyle.italic),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 6),
-          FilledButton.icon(
-            onPressed: onInvite,
-            style: FilledButton.styleFrom(
-              backgroundColor: AppTheme.forest,
-              foregroundColor: Colors.white,
-              minimumSize: const Size(0, 36),
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(999),
-              ),
-            ),
-            icon: const Icon(Icons.person_add_alt_1_rounded, size: 16),
-            label: const Text('Invite', style: TextStyle(fontSize: 12)),
           ),
         ],
       ),
