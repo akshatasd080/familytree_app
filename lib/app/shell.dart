@@ -23,7 +23,6 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  final _scaffoldKey = GlobalKey<ScaffoldState>();
   Timer? _unreadTimer;
 
   @override
@@ -65,6 +64,7 @@ class _AppShellState extends State<AppShell> {
     final themeSettings = context.watch<ThemeSettingsProvider>();
     final wide = MediaQuery.sizeOf(context).width >= 840;
     final mustChange = auth.user?.mustChangePassword == true;
+    final loc = GoRouterState.of(context).matchedLocation;
     final themeKey =
         'shell-theme-${themeSettings.isDark}-${themeSettings.accent.toARGB32()}';
 
@@ -77,7 +77,6 @@ class _AppShellState extends State<AppShell> {
           router.pop();
           return;
         }
-        final loc = GoRouterState.of(context).matchedLocation;
         if (loc != '/dashboard') {
           context.go('/dashboard');
           return;
@@ -85,7 +84,6 @@ class _AppShellState extends State<AppShell> {
         SystemNavigator.pop();
       },
       child: Scaffold(
-        key: _scaffoldKey,
         backgroundColor: AppTheme.shellBg,
         drawer: wide
             ? null
@@ -103,7 +101,7 @@ class _AppShellState extends State<AppShell> {
           children: [
             if (wide)
               SizedBox(
-                width: 240,
+                width: 252,
                 child: Material(
                   elevation: 0,
                   color: AppTheme.drawerBg,
@@ -125,8 +123,6 @@ class _AppShellState extends State<AppShell> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Rebuild route body when light/dark or accent changes —
-                  // Stateful screens otherwise keep stale AppTheme colors.
                   KeyedSubtree(
                     key: ValueKey(themeKey),
                     child: widget.child,
@@ -167,30 +163,75 @@ class _AppDrawer extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.symmetric(vertical: 8),
             children: [
-              ListTile(
-                title: Text(familyName, style: AppTheme.display(size: 20)),
-                subtitle: Text(
-                  userName,
-                  style: AppTheme.body(size: 14, color: AppTheme.muted),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Row(
+                  children: [
+                    const FtBrandMark(size: 48),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            familyName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTheme.display(size: 18),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            userName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTheme.body(
+                              size: 13,
+                              color: AppTheme.muted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                leading: const FtBrandMark(size: 44),
               ),
               const Divider(),
-              _item(context, Icons.dashboard, 'Dashboard', '/dashboard'),
-              // Members screen hidden for now
-              // _item(context, Icons.groups, 'Members', '/family/members'),
-              _item(context, Icons.account_tree, 'Tree', '/family/tree'),
-              _item(context, Icons.photo_library, 'Media', '/family/media'),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                child: Text(
+                  'EXPLORE',
+                  style: AppTheme.body(
+                    size: 11,
+                    weight: FontWeight.w700,
+                    color: AppTheme.muted,
+                  ),
+                ),
+              ),
+              _item(context, Icons.dashboard_outlined, 'Home', '/dashboard'),
+              _item(context, Icons.account_tree_outlined, 'Tree', '/family/tree'),
               _item(
                 context,
-                Icons.forum_outlined,
-                'Messages',
+                Icons.auto_awesome_mosaic_outlined,
+                'Feed',
+                '/family/media',
+              ),
+              _item(
+                context,
+                Icons.chat_bubble_outline_rounded,
+                'Chat',
+                '/family/chat',
+              ),
+              _item(
+                context,
+                Icons.campaign_outlined,
+                'Notices',
                 '/family/messages',
                 badge: messagesUnread,
               ),
-              _item(context, Icons.person, 'Profile', '/family/profile'),
+              _item(context, Icons.person_outline, 'Profile', '/family/profile'),
+              _item(context, Icons.groups_outlined, 'Members', '/family/members'),
               _item(context, Icons.map_outlined, 'Map', '/family/map'),
-              _item(context, Icons.event, 'Events', '/family/events'),
+              _item(context, Icons.event_outlined, 'Events', '/family/events'),
               _item(
                 context,
                 Icons.admin_panel_settings_outlined,
@@ -238,7 +279,7 @@ class _AppDrawer extends StatelessWidget {
       return SafeArea(child: content);
     }
     return Drawer(
-      width: MediaQuery.sizeOf(context).width * 0.72,
+      width: MediaQuery.sizeOf(context).width * 0.78,
       backgroundColor: AppTheme.drawerBg,
       child: SafeArea(child: content),
     );
@@ -255,25 +296,25 @@ class _AppDrawer extends StatelessWidget {
     final active =
         loc == path || (path != '/dashboard' && loc.startsWith(path));
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       child: ListTile(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         selected: active,
-        selectedTileColor: AppTheme.forest,
+        selectedTileColor: AppTheme.forest.withValues(alpha: 0.14),
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
         leading: Icon(
           icon,
           size: 22,
-          color: active ? Colors.white : AppTheme.muted,
+          color: active ? AppTheme.forest : AppTheme.muted,
         ),
         title: Text(
           label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: AppTheme.body(
-            size: 16,
+            size: 15,
             weight: FontWeight.w700,
-            color: active ? Colors.white : AppTheme.inkSoft,
+            color: active ? AppTheme.forest : AppTheme.inkSoft,
           ),
         ),
         trailing: badge > 0
@@ -281,17 +322,14 @@ class _AppDrawer extends StatelessWidget {
                 width: 10,
                 height: 10,
                 decoration: BoxDecoration(
-                  color: active ? Colors.white : AppTheme.emerald600,
+                  color: AppTheme.emerald600,
                   shape: BoxShape.circle,
                 ),
               )
             : null,
         onTap: () {
-          // Navigate first, then close drawer. Closing before go() can leave
-          // Members/Tree/Messages stuck behind the previous shell child.
           final router = GoRouter.of(context);
-          final goPath = path;
-          router.go(goPath);
+          router.go(path);
           if (!permanent && Navigator.of(context).canPop()) {
             Navigator.of(context).pop();
           }

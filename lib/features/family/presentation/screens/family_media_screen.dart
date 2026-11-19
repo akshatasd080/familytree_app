@@ -4,16 +4,14 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../../../app/router.dart';
 import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
 import '../../../../core/widgets/ft_page.dart';
 import '../../../../core/widgets/responsive.dart';
-import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../data/family_api_service.dart';
 import '../../data/models/family_models.dart';
 import '../providers/family_providers.dart';
-import '../widgets/family_chat_panel.dart';
-import '../widgets/family_room_panel.dart';
 
 class FamilyMediaScreen extends StatefulWidget {
   const FamilyMediaScreen({super.key});
@@ -22,25 +20,16 @@ class FamilyMediaScreen extends StatefulWidget {
   State<FamilyMediaScreen> createState() => _FamilyMediaScreenState();
 }
 
-class _FamilyMediaScreenState extends State<FamilyMediaScreen>
-    with SingleTickerProviderStateMixin {
+class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
   List<Map<String, dynamic>> _media = const [];
   List<FamilyMember> _members = const [];
   bool _loading = true;
   String? _error;
-  late final TabController _tabs;
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 2, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
-  }
-
-  @override
-  void dispose() {
-    _tabs.dispose();
-    super.dispose();
   }
 
   Future<void> _load() async {
@@ -243,9 +232,11 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen>
                       width: double.infinity,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFFF1F5),
+                        color: AppTheme.forest.withValues(alpha: 0.06),
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFFFBCFE8)),
+                        border: Border.all(
+                          color: AppTheme.forest.withValues(alpha: 0.22),
+                        ),
                       ),
                       child: Text(
                         path == null
@@ -253,7 +244,7 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen>
                             : 'Photo selected',
                         style: AppTheme.body(
                           weight: FontWeight.w700,
-                          color: AppTheme.accentPink,
+                          color: AppTheme.forest,
                         ),
                       ),
                     ),
@@ -338,9 +329,6 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen>
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppTheme.accentPink,
-                      ),
                       onPressed:
                           canPost ? () => Navigator.pop(ctx, true) : null,
                       child: const Text('Post'),
@@ -585,181 +573,301 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen>
     );
   }
 
+  Future<void> _toggleLike(Map<String, dynamic> item) async {
+    final familyId = context.read<FamilySessionProvider>().familyId;
+    final id = (item['id'] ?? '').toString();
+    if (familyId == null || id.isEmpty) return;
+    try {
+      final res =
+          await context.read<FamilyApiService>().likeFamilyMedia(familyId, id);
+      final data = res.data is Map
+          ? Map<String, dynamic>.from(res.data as Map)
+          : <String, dynamic>{};
+      if (!mounted) return;
+      setState(() {
+        final liked = data['liked'] == true;
+        item['likedByMe'] = liked;
+        final count = data['likeCount'] ?? data['likesCount'];
+        if (count != null) {
+          item['likeCount'] =
+              count is int ? count : int.tryParse('$count') ?? _likes(item);
+        } else {
+          item['likeCount'] =
+              liked ? _likes(item) + 1 : (_likes(item) > 0 ? _likes(item) - 1 : 0);
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Widget _buildStoriesStrip() {
+    final living = _members.where((m) => m.isAlive).take(16).toList();
+    if (living.isEmpty) return const SizedBox.shrink();
+    return SizedBox(
+      height: 96,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+        itemCount: living.length + 1,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (_, i) {
+          if (i == 0) {
+            return _StoryBubble(
+              label: 'Post',
+              isCreate: true,
+              onTap: _compose,
+            );
+          }
+          final m = living[i - 1];
+          return _StoryBubble(
+            label: m.name.split(' ').first,
+            avatarUrl: mediaUrl(m.avatar),
+            onTap: () => context.openShell('/family/tree'),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildFeed() {
     if (_media.isEmpty) {
       return ListView(
-        children: const [
-          SizedBox(height: 120),
-          Center(child: Text('No photos yet')),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 100),
+        children: [
+          _buildStoriesStrip(),
+          const SizedBox(height: 48),
+          Icon(Icons.photo_library_outlined, size: 48, color: AppTheme.muted),
+          const SizedBox(height: 12),
+          Text(
+            'No family posts yet',
+            textAlign: TextAlign.center,
+            style: AppTheme.display(size: 20),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Share a photo or feeling to start your family feed.',
+            textAlign: TextAlign.center,
+            style: AppTheme.body(color: AppTheme.muted),
+          ),
+          const SizedBox(height: 20),
+          Center(
+            child: FilledButton.icon(
+              onPressed: _compose,
+              icon: const Icon(Icons.add_a_photo_outlined),
+              label: const Text('Create post'),
+            ),
+          ),
         ],
       );
     }
     return ListView.builder(
-      padding: context.pagePadding.copyWith(bottom: 88),
-      itemCount: _media.length,
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: EdgeInsets.only(bottom: 100, top: 4),
+      itemCount: _media.length + 1,
       itemBuilder: (_, i) {
-        final item = _media[i];
+        if (i == 0) return _buildStoriesStrip();
+        final item = _media[i - 1];
         final url = _imageUrl(item);
         final created =
             item['createdAt'] ?? item['created_at'] ?? item['uploadedAt'];
         final when = DateTime.tryParse('$created');
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Material(
+        final author = _author(item);
+        final liked = _likedByMe(item);
+        final caption = (item['caption'] ?? '').toString();
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          decoration: BoxDecoration(
             color: AppTheme.card,
-            borderRadius: BorderRadius.circular(16),
-            child: InkWell(
-              onTap: () => _openPost(item),
-              borderRadius: BorderRadius.circular(16),
-              child: Ink(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFFCE7F3)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+            border: Border(
+              top: BorderSide(color: AppTheme.borderSoft),
+              bottom: BorderSide(color: AppTheme.borderSoft),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 8, 10),
+                child: Row(
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 16,
-                            backgroundColor:
-                                AppTheme.accentPink.withValues(alpha: 0.15),
-                            child: Text(
-                              _author(item).isNotEmpty
-                                  ? _author(item)[0].toUpperCase()
-                                  : '?',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFFFF5C8A),
-                              ),
+                    Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [
+                            AppTheme.forest,
+                            AppTheme.emerald600,
+                            const Color(0xFFD4AF68),
+                          ],
+                        ),
+                      ),
+                      child: CircleAvatar(
+                        radius: 17,
+                        backgroundColor: AppTheme.card,
+                        child: CircleAvatar(
+                          radius: 15,
+                          backgroundColor:
+                              AppTheme.forest.withValues(alpha: 0.12),
+                          child: Text(
+                            author.isNotEmpty ? author[0].toUpperCase() : '?',
+                            style: AppTheme.body(
+                              weight: FontWeight.w800,
+                              color: AppTheme.forest,
+                              size: 13,
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _author(item),
-                                  style: AppTheme.body(weight: FontWeight.w800),
-                                ),
-                                if (when != null)
-                                  Text(
-                                    DateFormat.yMMMd()
-                                        .add_jm()
-                                        .format(when.toLocal()),
-                                    style: AppTheme.body(
-                                      size: 11,
-                                      color: AppTheme.muted,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
-                    AspectRatio(
-                      aspectRatio: 4 / 3,
-                      child: url == null
-                          ? Container(
-                              color: Colors.black12,
-                              child: const Icon(Icons.image),
-                            )
-                          : CachedNetworkImage(
-                              imageUrl: url,
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                            ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                    const SizedBox(width: 10),
+                    Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.favorite,
-                                size: 16,
-                                color: Color(0xFFFF5C8A),
-                              ),
-                              const SizedBox(width: 4),
-                              Text('${_likes(item)}'),
-                              const SizedBox(width: 12),
-                              const Icon(Icons.chat_bubble_outline, size: 16),
-                              const SizedBox(width: 4),
-                              Text('${_comments(item).length}'),
-                            ],
-                          ),
-                          if ((item['caption'] ?? '').toString().isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              item['caption'].toString(),
-                              maxLines: 3,
-                              overflow: TextOverflow.ellipsis,
+                          Text(
+                            author,
+                            style: AppTheme.body(
+                              weight: FontWeight.w800,
+                              size: 14,
                             ),
-                          ],
+                          ),
+                          if (when != null)
+                            Text(
+                              DateFormat.MMMd().add_jm().format(when.toLocal()),
+                              style: AppTheme.body(
+                                size: 11,
+                                color: AppTheme.muted,
+                              ),
+                            ),
                         ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => _openPost(item),
+                      icon: Icon(Icons.more_horiz, color: AppTheme.muted),
+                    ),
+                  ],
+                ),
+              ),
+              if (url != null)
+                GestureDetector(
+                  onDoubleTap: () => _toggleLike(item),
+                  onTap: () => _openPost(item),
+                  child: AspectRatio(
+                    aspectRatio: 1,
+                    child: CachedNetworkImage(
+                      imageUrl: url,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      placeholder: (_, __) => Container(
+                        color: AppTheme.tabTrack,
+                        alignment: Alignment.center,
+                        child: const CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      errorWidget: (_, __, ___) => Container(
+                        color: AppTheme.tabTrack,
+                        alignment: Alignment.center,
+                        child: Icon(Icons.broken_image_outlined,
+                            color: AppTheme.muted),
+                      ),
+                    ),
+                  ),
+                )
+              else if (caption.isNotEmpty)
+                GestureDetector(
+                  onTap: () => _openPost(item),
+                  child: Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.symmetric(horizontal: 14),
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          AppTheme.forest.withValues(alpha: 0.12),
+                          AppTheme.cream,
+                        ],
+                      ),
+                    ),
+                    child: Text(
+                      caption,
+                      style: AppTheme.display(size: 18, height: 1.35),
+                    ),
+                  ),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => _toggleLike(item),
+                      icon: Icon(
+                        liked ? Icons.favorite_rounded : Icons.favorite_border,
+                        color: liked ? AppTheme.accentPink : AppTheme.ink,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => _openPost(item),
+                      icon: Icon(
+                        Icons.mode_comment_outlined,
+                        color: AppTheme.ink,
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => context.openShell('/family/chat'),
+                      icon: Icon(
+                        Icons.send_outlined,
+                        color: AppTheme.ink,
+                      ),
+                    ),
+                    const Spacer(),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: Text(
+                        '${_likes(item)} likes · ${_comments(item).length} comments',
+                        style: AppTheme.body(
+                          size: 12,
+                          weight: FontWeight.w600,
+                          color: AppTheme.mutedSoft,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
+              if (caption.isNotEmpty && url != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                  child: RichText(
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    text: TextSpan(
+                      style: AppTheme.body(size: 13),
+                      children: [
+                        TextSpan(
+                          text: '$author ',
+                          style: AppTheme.body(
+                            size: 13,
+                            weight: FontWeight.w800,
+                          ),
+                        ),
+                        TextSpan(text: caption),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                const SizedBox(height: 8),
+            ],
           ),
         );
       },
-    );
-  }
-
-  Widget _buildChatsTab(String familyId) {
-    final myUserId = context.watch<AuthProvider>().user?.id;
-    return DefaultTabController(
-      length: 2,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: Container(
-              decoration: BoxDecoration(
-                color: AppTheme.tabTrack,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: TabBar(
-                indicator: BoxDecoration(
-                  color: AppTheme.card,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                indicatorSize: TabBarIndicatorSize.tab,
-                dividerColor: Colors.transparent,
-                labelColor: AppTheme.ink,
-                unselectedLabelColor: AppTheme.muted,
-                labelStyle: AppTheme.body(size: 12, weight: FontWeight.w700),
-                tabs: const [
-                  Tab(text: 'Direct'),
-                  Tab(text: 'Rooms'),
-                ],
-              ),
-            ),
-          ),
-          Expanded(
-            child: TabBarView(
-              children: [
-                FamilyChatPanel(familyId: familyId),
-                FamilyRoomPanel(
-                  familyId: familyId,
-                  members: _members,
-                  myUserId: myUserId,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -767,70 +875,116 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen>
   Widget build(BuildContext context) {
     final familyId = context.watch<FamilySessionProvider>().familyId;
     return FtPage(
-      title: 'Media',
+      title: 'Family Feed',
       actions: [
-        IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+        IconButton(
+          tooltip: 'Chat',
+          onPressed: () => context.openShell('/family/chat'),
+          icon: const Icon(Icons.chat_bubble_outline_rounded),
+        ),
+        IconButton(
+          tooltip: 'Refresh',
+          onPressed: _load,
+          icon: const Icon(Icons.refresh_rounded),
+        ),
       ],
-      floatingActionButton: _tabs.index == 0
-          ? FloatingActionButton.extended(
-              onPressed: _compose,
-              backgroundColor: AppTheme.accentPink,
-              foregroundColor: Colors.black,
-              icon: const Icon(Icons.add_a_photo),
-              label: const Text('Post'),
-            )
-          : null,
+      floatingActionButton: FloatingActionButton(
+        onPressed: _compose,
+        backgroundColor: AppTheme.forest,
+        foregroundColor: Colors.white,
+        child: const Icon(Icons.add_rounded),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _error != null
               ? Center(child: Text(_error!))
               : familyId == null
                   ? const Center(child: Text('No family'))
-                  : Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: AppTheme.tabTrack,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: TabBar(
-                              controller: _tabs,
-                              onTap: (_) => setState(() {}),
-                              indicator: BoxDecoration(
-                                color: AppTheme.forest,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              indicatorSize: TabBarIndicatorSize.tab,
-                              dividerColor: Colors.transparent,
-                              labelColor: Colors.white,
-                              unselectedLabelColor: AppTheme.muted,
-                              labelStyle: AppTheme.body(
-                                size: 13,
-                                weight: FontWeight.w700,
-                              ),
-                              tabs: const [
-                                Tab(text: 'Feed'),
-                                Tab(text: 'Chats'),
-                              ],
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: TabBarView(
-                            controller: _tabs,
-                            children: [
-                              RefreshIndicator(
-                                onRefresh: _load,
-                                child: _buildFeed(),
-                              ),
-                              _buildChatsTab(familyId),
-                            ],
-                          ),
-                        ),
-                      ],
+                  : RefreshIndicator(
+                      onRefresh: _load,
+                      child: _buildFeed(),
                     ),
+    );
+  }
+}
+
+class _StoryBubble extends StatelessWidget {
+  const _StoryBubble({
+    required this.label,
+    required this.onTap,
+    this.avatarUrl,
+    this.isCreate = false,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+  final String? avatarUrl;
+  final bool isCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(40),
+      child: SizedBox(
+        width: 68,
+        child: Column(
+          children: [
+            Container(
+              width: 58,
+              height: 58,
+              padding: const EdgeInsets.all(2.5),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: isCreate
+                    ? null
+                    : LinearGradient(
+                        colors: [
+                          AppTheme.forest,
+                          AppTheme.emerald600,
+                          const Color(0xFFD4AF68),
+                        ],
+                      ),
+                border: isCreate
+                    ? Border.all(color: AppTheme.border, width: 1.5)
+                    : null,
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppTheme.card,
+                  border: Border.all(color: AppTheme.card, width: 2),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: isCreate
+                    ? Icon(Icons.add, color: AppTheme.forest)
+                    : avatarUrl != null
+                        ? CachedNetworkImage(
+                            imageUrl: avatarUrl!,
+                            fit: BoxFit.cover,
+                          )
+                        : Center(
+                            child: Text(
+                              label.isNotEmpty ? label[0].toUpperCase() : '?',
+                              style: AppTheme.body(
+                                weight: FontWeight.w800,
+                                color: AppTheme.forest,
+                              ),
+                            ),
+                          ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: AppTheme.body(size: 11, weight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -260,16 +260,18 @@ class FamilyChatPanelState extends State<FamilyChatPanel> {
                     (c['userId'] ?? c['user_id'] ?? '').toString();
                 return ListTile(
                   onTap: () => openChat(peerId),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                   leading: CircleAvatar(
-                    backgroundColor:
-                        AppTheme.accentPink.withValues(alpha: 0.15),
+                    radius: 24,
+                    backgroundColor: AppTheme.forest.withValues(alpha: 0.12),
                     backgroundImage:
                         avatar != null ? NetworkImage(avatar) : null,
                     child: avatar == null
                         ? Text(
                             name.isNotEmpty ? name[0].toUpperCase() : '?',
                             style: TextStyle(
-                              color: AppTheme.accentPink,
+                              color: AppTheme.forest,
                               fontWeight: FontWeight.w800,
                             ),
                           )
@@ -279,22 +281,22 @@ class FamilyChatPanelState extends State<FamilyChatPanel> {
                     name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppTheme.body(weight: FontWeight.w700, size: 13),
+                    style: AppTheme.body(weight: FontWeight.w700, size: 14),
                   ),
                   subtitle: Text(
                     last,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppTheme.body(size: 11, color: AppTheme.muted),
+                    style: AppTheme.body(size: 12, color: AppTheme.muted),
                   ),
                   trailing: unread > 0
                       ? Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
+                            horizontal: 7,
+                            vertical: 3,
                           ),
                           decoration: BoxDecoration(
-                            color: AppTheme.accentPink,
+                            color: AppTheme.forest,
                             borderRadius: BorderRadius.circular(999),
                           ),
                           child: Text(
@@ -307,9 +309,9 @@ class FamilyChatPanelState extends State<FamilyChatPanel> {
                           ),
                         )
                       : Icon(
-                          Icons.chat_bubble_outline,
-                          size: 18,
-                          color: AppTheme.accentPink,
+                          Icons.chevron_right_rounded,
+                          size: 20,
+                          color: AppTheme.muted,
                         ),
                 );
               },
@@ -334,8 +336,8 @@ class FamilyChatPanelState extends State<FamilyChatPanel> {
                 icon: const Icon(Icons.arrow_back),
               ),
               CircleAvatar(
-                radius: 14,
-                backgroundColor: AppTheme.accentPink.withValues(alpha: 0.15),
+                radius: 16,
+                backgroundColor: AppTheme.forest.withValues(alpha: 0.12),
                 backgroundImage:
                     avatar != null ? NetworkImage(avatar) : null,
                 child: avatar == null
@@ -346,7 +348,7 @@ class FamilyChatPanelState extends State<FamilyChatPanel> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
-                          color: AppTheme.accentPink,
+                          color: AppTheme.forest,
                         ),
                       )
                     : null,
@@ -357,7 +359,7 @@ class FamilyChatPanelState extends State<FamilyChatPanel> {
                   peerName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTheme.body(weight: FontWeight.w800, size: 13),
+                  style: AppTheme.body(weight: FontWeight.w800, size: 15),
                 ),
               ),
               if (widget.onClose != null)
@@ -406,14 +408,14 @@ class FamilyChatPanelState extends State<FamilyChatPanel> {
                             ),
                             decoration: BoxDecoration(
                               color: fromMe
-                                  ? AppTheme.accentPink
-                                  : AppTheme.card,
+                                  ? AppTheme.forest
+                                  : AppTheme.tabTrack,
                               borderRadius: BorderRadius.only(
-                                topLeft: const Radius.circular(16),
-                                topRight: const Radius.circular(16),
-                                bottomLeft: Radius.circular(fromMe ? 16 : 4),
+                                topLeft: const Radius.circular(18),
+                                topRight: const Radius.circular(18),
+                                bottomLeft: Radius.circular(fromMe ? 18 : 5),
                                 bottomRight:
-                                    Radius.circular(fromMe ? 4 : 16),
+                                    Radius.circular(fromMe ? 5 : 18),
                               ),
                               border: fromMe
                                   ? null
@@ -422,7 +424,7 @@ class FamilyChatPanelState extends State<FamilyChatPanel> {
                             child: Text(
                               body,
                               style: AppTheme.body(
-                                size: 12,
+                                size: 13,
                                 color: fromMe ? Colors.white : AppTheme.ink,
                               ),
                             ),
@@ -459,8 +461,8 @@ class FamilyChatPanelState extends State<FamilyChatPanel> {
               const SizedBox(width: 6),
               IconButton.filled(
                 style: IconButton.styleFrom(
-                  backgroundColor: AppTheme.accentPink,
-                  foregroundColor: Colors.black,
+                  backgroundColor: AppTheme.forest,
+                  foregroundColor: Colors.white,
                 ),
                 onPressed: _sending ? null : _send,
                 icon: _sending
@@ -469,10 +471,10 @@ class FamilyChatPanelState extends State<FamilyChatPanel> {
                         height: 16,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.black,
+                          color: Colors.white,
                         ),
                       )
-                    : const Icon(Icons.send, size: 18),
+                    : const Icon(Icons.send_rounded, size: 18),
               ),
             ],
           ),

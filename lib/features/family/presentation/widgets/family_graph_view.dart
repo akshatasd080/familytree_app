@@ -403,6 +403,59 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
           color: theme.canvasBg,
           child: Stack(
           children: [
+            // Soft scenic meadow/tree backdrop (mockup look).
+            Positioned.fill(
+              child: IgnorePointer(
+                child: Opacity(
+                  opacity: 0.42,
+                  child: Image.asset(
+                    'assets/images/tree_canvas_bg.jpg',
+                    fit: BoxFit.cover,
+                    alignment: Alignment.center,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        theme.canvasBg.withValues(alpha: 0.55),
+                        theme.canvasBg.withValues(alpha: 0.18),
+                        theme.canvasBg.withValues(alpha: 0.45),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              right: 18,
+              top: 18,
+              child: IgnorePointer(
+                child: Text(
+                  'Family… A beautiful connection ♡',
+                  style: TextStyle(
+                    fontFamily: 'serif',
+                    fontStyle: FontStyle.italic,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: theme.cardText.withValues(alpha: 0.45),
+                    shadows: [
+                      Shadow(
+                        color: Colors.white.withValues(alpha: 0.8),
+                        blurRadius: 8,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
             ClipRect(
               child: InteractiveViewer(
                 transformationController: _tx,
@@ -427,7 +480,7 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
                             child: DecoratedBox(
                               decoration: BoxDecoration(
                                 color: theme.bands[i % theme.bands.length].bg
-                                    .withValues(alpha: 0.42),
+                                    .withValues(alpha: 0.22),
                               ),
                               child: Align(
                                 alignment: Alignment.centerLeft,
@@ -441,7 +494,8 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
                                         color: theme
-                                            .bands[i % theme.bands.length].ink,
+                                            .bands[i % theme.bands.length].ink
+                                            .withValues(alpha: 0.75),
                                         fontWeight: FontWeight.w800,
                                         fontSize: 12,
                                         height: 1.2,
@@ -518,7 +572,7 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
               child: Material(
                 color: theme.cardBg.withValues(alpha: 0.96),
                 elevation: 2,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(14),
                 child: Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -555,7 +609,7 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
               child: Material(
                 color: theme.cardBg.withValues(alpha: 0.96),
                 elevation: 3,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 2),
                   child: Row(

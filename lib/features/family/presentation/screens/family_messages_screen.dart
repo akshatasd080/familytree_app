@@ -225,7 +225,7 @@ class _FamilyMessagesScreenState extends State<FamilyMessagesScreen> {
   @override
   Widget build(BuildContext context) {
     return FtPage(
-      title: 'Messages',
+      title: 'Notices',
       actions: [
         IconButton(
           tooltip: 'Refresh',

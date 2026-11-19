@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../features/auth/presentation/providers/auth_providers.dart';
 import '../features/auth/presentation/screens/login_screen.dart';
 import '../features/family/presentation/screens/family_admin_screen.dart';
+import '../features/family/presentation/screens/family_chat_hub_screen.dart';
 import '../features/family/presentation/screens/family_events_screen.dart';
 import '../features/family/presentation/screens/family_join_screen.dart';
 import '../features/family/presentation/screens/family_map_screen.dart';
@@ -90,6 +91,10 @@ GoRouter createRouter(AuthProvider auth) {
           GoRoute(
             path: '/family/photos',
             builder: (_, __) => const FamilyMediaScreen(),
+          ),
+          GoRoute(
+            path: '/family/chat',
+            builder: (_, __) => const FamilyChatHubScreen(),
           ),
           GoRoute(
             path: '/family/profile',

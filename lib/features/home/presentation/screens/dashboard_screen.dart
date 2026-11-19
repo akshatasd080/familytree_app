@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../app/router.dart';
 import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
-import '../../../../core/widgets/ft_page.dart';
 import '../../../../core/widgets/ft_widgets.dart';
 import '../../../../core/widgets/responsive.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../family/data/family_api_service.dart';
 import '../../../family/data/models/family_models.dart';
 import '../../../family/presentation/providers/family_providers.dart';
+import '../../../settings/presentation/providers/theme_settings_provider.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -23,7 +24,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<FamilyMember> _members = const [];
   List<Map<String, dynamic>> _invites = const [];
   List<Map<String, dynamic>> _notifications = const [];
-  List<Map<String, dynamic>> _pending = const [];
+  List<Map<String, dynamic>> _recentPosts = const [];
   bool _loading = true;
   String? _error;
 
@@ -35,22 +36,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String _norm(String? rel) =>
       (rel ?? '').toLowerCase().replaceAll(RegExp(r'\s+'), '');
-
-  int _estimateGenerations(List<FamilyMember> members) {
-    final rels = members.map((m) => _norm(m.relationship)).toSet();
-    var g = 1;
-    if (rels.any((r) => ['father', 'mother', 'uncle', 'aunt'].contains(r))) {
-      g = 2;
-    }
-    if (rels.any((r) =>
-        ['grandfather', 'grandmother', 'grandma', 'grandpa'].contains(r))) {
-      g = 3;
-    }
-    if (rels.any((r) => ['son', 'daughter'].contains(r))) {
-      g = g < 2 ? 2 : g;
-    }
-    return g;
-  }
 
   Future<void> _load() async {
     setState(() {
@@ -68,15 +53,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       final familyId = session.familyId;
       if (familyId != null) {
-        final membersRes = await api.listFamilyMembers(familyId);
-        final mdata = membersRes.data;
+        final familyResults = await Future.wait([
+          api.listFamilyMembers(familyId),
+          api.listFamilyMedia(familyId),
+        ]);
+        final mdata = familyResults[0].data;
         List list = const [];
-        List pending = const [];
         if (mdata is Map) {
           if (mdata['members'] is List) list = mdata['members'] as List;
-          if (mdata['pendingInvitations'] is List) {
-            pending = mdata['pendingInvitations'] as List;
-          }
         } else if (mdata is List) {
           list = mdata;
         }
@@ -84,10 +68,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
             .whereType<Map>()
             .map((e) => FamilyMember.fromJson(Map<String, dynamic>.from(e)))
             .toList();
-        _pending = pending
+
+        final mediaData = familyResults[1].data;
+        List mediaList = const [];
+        if (mediaData is Map && mediaData['media'] is List) {
+          mediaList = mediaData['media'] as List;
+        } else if (mediaData is List) {
+          mediaList = mediaData;
+        }
+        _recentPosts = mediaList
             .whereType<Map>()
             .map((e) => Map<String, dynamic>.from(e))
+            .take(8)
             .toList();
+      } else {
+        _recentPosts = const [];
       }
 
       final inv = results[0].data;
@@ -222,706 +217,642 @@ class _DashboardScreenState extends State<DashboardScreen> {
     };
   }
 
+  List<FamilyMember> _snapshotMembers() {
+    final out = <FamilyMember>[];
+    final seen = <String>{};
+    void add(FamilyMember? m) {
+      if (m == null || !seen.add(m.id)) return;
+      out.add(m);
+    }
+
+    add(_first(['father', 'dad']));
+    add(_first(['mother', 'mom']));
+    add(
+      _members.cast<FamilyMember?>().firstWhere(
+            (m) => _norm(m?.relationship) == 'sitecreator',
+            orElse: () => _members.isNotEmpty ? _members.first : null,
+          ),
+    );
+    for (final m in _members.where(
+      (m) => ['brother', 'sister', 'son', 'daughter']
+          .contains(_norm(m.relationship)),
+    )) {
+      add(m);
+      if (out.length >= 6) break;
+    }
+    if (out.length < 4) {
+      for (final m in _members) {
+        add(m);
+        if (out.length >= 6) break;
+      }
+    }
+    return out;
+  }
+
+  int get _unreadNotices =>
+      context.watch<FamilyNoticesUnreadProvider>().unreadCount;
+
+  int get _unreadActivity {
+    var n = 0;
+    for (final item in _notifications) {
+      final read = item['is_read'] == true || item['isRead'] == true;
+      if (!read) n += 1;
+    }
+    return n + _unreadNotices;
+  }
+
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeSettingsProvider>();
     final session = context.watch<FamilySessionProvider>();
     final auth = context.watch<AuthProvider>();
     final family = session.current;
-    final gens = _estimateGenerations(_members);
-    final bannerUrl = mediaUrl(family?.avatar);
-    final cols = context.gridCount(phone: 2, tablet: 2, wide: 4);
+    final wide = MediaQuery.sizeOf(context).width >= 840;
+    final canOpenDrawer = !wide && Scaffold.maybeOf(context)?.hasDrawer == true;
+    final firstName = (auth.user?.name ?? 'there').split(' ').first;
+    final userAvatar = mediaUrl(
+      _members
+          .cast<FamilyMember?>()
+          .firstWhere(
+            (m) =>
+                m?.userId == auth.user?.id ||
+                _norm(m?.relationship) == 'sitecreator',
+            orElse: () => null,
+          )
+          ?.avatar,
+    );
 
-    return FtPage(
-      title: family?.name ?? 'Dashboard',
-      actions: [
-        IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
-      ],
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: ResponsiveBody(
-                padding: EdgeInsets.fromLTRB(
-                  context.isWide ? 28 : (context.isTablet ? 20 : 16),
-                  6,
-                  context.isWide ? 28 : (context.isTablet ? 20 : 16),
-                  12,
-                ),
-                child: ListView(
-                  padding: EdgeInsets.zero,
-                  children: [
-                    if (_error != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(
-                          _error!,
-                          style: AppTheme.body(color: Colors.red, size: 13),
+    return Material(
+      color: const Color(0xFFF3F7F4),
+      child: Stack(
+        children: [
+          Column(
+            children: [
+              SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding:
+                      EdgeInsets.fromLTRB(canOpenDrawer ? 2 : 14, 6, 8, 8),
+                  child: Row(
+                    children: [
+                      if (canOpenDrawer)
+                        IconButton(
+                          tooltip: 'Menu',
+                          onPressed: () => Scaffold.of(context).openDrawer(),
+                          icon: Icon(Icons.menu_rounded, color: AppTheme.ink),
                         ),
-                      ),
-                    _DashboardHero(
-                      familyName: family?.name,
-                      userName: auth.user?.name,
-                      bannerUrl: bannerUrl,
-                    ),
-                    const SizedBox(height: 12),
-                    _FamilyOverviewCard(overview: _familyOverview()),
-                    if (_invites.isNotEmpty) ...[
-                      const SizedBox(height: 14),
-                      FtSectionCard(
-                        color: AppTheme.amber50,
-                        borderColor: AppTheme.amber200,
+                      const FtBrandMark(size: 38),
+                      const SizedBox(width: 10),
+                      Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Invitations for you',
-                              style: AppTheme.body(weight: FontWeight.w800),
+                              family?.name ?? 'Family Tree',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTheme.display(
+                                size: 22,
+                                color: AppTheme.forestDark,
+                              ),
                             ),
-                            const SizedBox(height: 8),
-                            ..._invites.map((inv) {
-                              final id = (inv['id'] ?? '').toString();
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.card,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border:
-                                        Border.all(color: AppTheme.amber200),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '${inv['invitedBy'] ?? 'A family admin'} invited you to ${inv['familyName'] ?? 'a family'} as ${inv['relationship'] ?? 'member'}',
-                                        style: AppTheme.body(size: 13),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Wrap(
-                                        spacing: 8,
-                                        runSpacing: 8,
-                                        children: [
-                                          FilledButton(
-                                            onPressed: () async {
-                                              await context
-                                                  .read<FamilyApiService>()
-                                                  .acceptInvitation(id);
-                                              _load();
-                                            },
-                                            child: const Text('Accept'),
-                                          ),
-                                          OutlinedButton(
-                                            onPressed: () async {
-                                              await context
-                                                  .read<FamilyApiService>()
-                                                  .rejectInvitation(id);
-                                              _load();
-                                            },
-                                            child: const Text('Reject'),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            }),
+                            Text(
+                              'Our Family • Our Roots • Forever ❤️',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTheme.body(
+                                size: 11,
+                                color: AppTheme.muted,
+                                weight: FontWeight.w600,
+                              ),
+                            ),
                           ],
                         ),
                       ),
-                    ],
-                    const SizedBox(height: 14),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        final itemWidth =
-                            (constraints.maxWidth - (cols - 1) * 10) / cols;
-                        return Wrap(
-                          spacing: 10,
-                          runSpacing: 10,
-                          children: [
-                            SizedBox(
-                              width: itemWidth,
-                              child: FtStatCard(
-                                icon: Icons.groups,
-                                value: '${_members.length}',
-                                label: 'Members',
-                                sub: 'In your family',
-                              ),
-                            ),
-                            SizedBox(
-                              width: itemWidth,
-                              child: FtStatCard(
-                                icon: Icons.account_tree,
-                                value: '$gens',
-                                label: 'Generations',
-                                sub: 'On your tree',
-                                tone: FtStatTone.purple,
-                              ),
-                            ),
-                            SizedBox(
-                              width: itemWidth,
-                              child: FtStatCard(
-                                icon: Icons.mail_outline,
-                                value: '${_pending.length}',
-                                label: 'Pending invites',
-                                sub: 'Awaiting OTP',
-                                tone: FtStatTone.orange,
-                              ),
-                            ),
-                            SizedBox(
-                              width: itemWidth,
-                              child: FtStatCard(
-                                icon: Icons.notifications_outlined,
-                                value: '${_notifications.length}',
-                                label: 'Notifications',
-                                sub: 'Recent activity',
-                                tone: FtStatTone.blue,
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Quick actions',
-                      style: AppTheme.body(weight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 8),
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        const gap = 8.0;
-                        const perRow = 3;
-                        final itemWidth =
-                            (constraints.maxWidth - gap * (perRow - 1)) /
-                                perRow;
-                        final actions = <(IconData, String, VoidCallback)>[
-                          (
-                            Icons.account_tree,
-                            'Tree',
-                            () => context.openShell('/family/tree')
-                          ),
-                          // Members screen hidden for now
-                          // (
-                          //   Icons.groups,
-                          //   'Members',
-                          //   () => context.openShell('/family/members')
-                          // ),
-                          (
-                            Icons.photo_library,
-                            'Media',
-                            () => context.openShell('/family/media')
-                          ),
-                          (
-                            Icons.event,
-                            'Events',
-                            () => context.openShell('/family/events')
-                          ),
-                          (
-                            Icons.map_outlined,
-                            'Map',
-                            () => context.openShell('/family/map')
-                          ),
-                          (
-                            Icons.person,
-                            'Profile',
-                            () => context.openShell('/family/profile')
-                          ),
-                        ];
-                        return Wrap(
-                          spacing: gap,
-                          runSpacing: gap,
-                          children: [
-                            for (final a in actions)
-                              SizedBox(
-                                width: itemWidth,
-                                child: _ActionChip(a.$1, a.$2, a.$3),
-                              ),
-                          ],
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 16),
-                    FtSectionCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      Stack(
+                        clipBehavior: Clip.none,
                         children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  'Family snapshot',
-                                  style:
-                                      AppTheme.body(weight: FontWeight.w800),
+                          IconButton(
+                            tooltip: 'Notices',
+                            onPressed: () =>
+                                context.openShell('/family/messages'),
+                            icon: Icon(
+                              Icons.notifications_none_rounded,
+                              color: AppTheme.ink,
+                            ),
+                          ),
+                          if (_unreadActivity > 0)
+                            Positioned(
+                              right: 10,
+                              top: 10,
+                              child: Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFE11D48),
+                                  shape: BoxShape.circle,
                                 ),
                               ),
-                              TextButton(
-                                onPressed: () =>
-                                    context.openShell('/family/tree'),
-                                child: Text(
-                                  'Open tree',
-                                  style: AppTheme.body(
-                                    weight: FontWeight.w700,
-                                    color: AppTheme.forest,
-                                    size: 13,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          _MiniTreePreview(
-                            grandparents: [
-                              _first(['grandfather', 'grandpa']),
-                              _first(['grandmother', 'grandma']),
-                            ].whereType<FamilyMember>().toList(),
-                            parents: [
-                              _first(['father', 'dad']),
-                              _first(['mother', 'mom']),
-                            ].whereType<FamilyMember>().toList(),
-                            bottom: [
-                              _first(['uncle']),
-                              _members.cast<FamilyMember?>().firstWhere(
-                                    (m) =>
-                                        _norm(m?.relationship) ==
-                                        'sitecreator',
-                                    orElse: () => _members.isNotEmpty
-                                        ? _members.first
-                                        : null,
-                                  ),
-                              ..._members.where(
-                                (m) => ['brother', 'sister']
-                                    .contains(_norm(m.relationship)),
-                              ),
-                              _first(['aunt']),
-                            ].whereType<FamilyMember>().toList(),
-                          ),
+                            ),
                         ],
                       ),
-                    ),
-                    if (_notifications.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      Text(
-                        'Activity',
-                        style: AppTheme.body(weight: FontWeight.w800),
+                      IconButton(
+                        onPressed: _load,
+                        icon: Icon(
+                          Icons.refresh_rounded,
+                          color: AppTheme.ink,
+                        ),
                       ),
-                      const SizedBox(height: 8),
-                      ..._notifications.take(6).map(
-                            (n) {
-                              final id = (n['id'] ?? '').toString();
-                              final isRead = n['is_read'] == true ||
-                                  n['isRead'] == true;
-                              return Padding(
+                    ],
+                  ),
+                ),
+              ),
+              Expanded(
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : RefreshIndicator(
+                        onRefresh: _load,
+                        child: ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: EdgeInsets.fromLTRB(
+                            context.isWide ? 28 : 16,
+                            4,
+                            context.isWide ? 28 : 16,
+                            100,
+                          ),
+                          children: [
+                            if (_error != null)
+                              Padding(
                                 padding: const EdgeInsets.only(bottom: 8),
-                                child: Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    borderRadius: BorderRadius.circular(14),
-                                    onTap: id.isEmpty
-                                        ? null
-                                        : () async {
-                                            final api = context
-                                                .read<FamilyApiService>();
-                                            final messenger =
-                                                ScaffoldMessenger.of(context);
-                                            try {
-                                              await api
-                                                  .markNotificationRead(id);
-                                              if (!mounted) return;
-                                              setState(() {
-                                                _notifications =
-                                                    _notifications
-                                                        .where(
-                                                          (item) =>
-                                                              (item['id'] ?? '')
-                                                                  .toString() !=
-                                                              id,
-                                                        )
-                                                        .toList();
-                                              });
-                                            } catch (e) {
-                                              messenger.showSnackBar(
-                                                SnackBar(content: Text('$e')),
-                                              );
-                                            }
-                                          },
-                                    child: FtSectionCard(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 10,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            isRead
-                                                ? Icons
-                                                    .notifications_none_outlined
-                                                : Icons.notifications_outlined,
-                                            color: AppTheme.forest,
-                                            size: 18,
+                                child: Text(
+                                  _error!,
+                                  style:
+                                      AppTheme.body(color: Colors.red, size: 13),
+                                ),
+                              ),
+                            _WelcomeHero(
+                              userName: firstName,
+                              polaroidUrl: userAvatar,
+                            ),
+                            if (_invites.isNotEmpty) ...[
+                              const SizedBox(height: 14),
+                              _InvitesCard(
+                                invites: _invites,
+                                onAccept: (id) async {
+                                  await context
+                                      .read<FamilyApiService>()
+                                      .acceptInvitation(id);
+                                  _load();
+                                },
+                                onReject: (id) async {
+                                  await context
+                                      .read<FamilyApiService>()
+                                      .rejectInvitation(id);
+                                  _load();
+                                },
+                              ),
+                            ],
+                            const SizedBox(height: 16),
+                            _QuickActionsGrid(
+                              onTree: () => context.openShell('/family/tree'),
+                              onFeed: () => context.openShell('/family/media'),
+                              onChat: () => context.openShell('/family/chat'),
+                              onEvents: () =>
+                                  context.openShell('/family/events'),
+                              onMap: () => context.openShell('/family/map'),
+                              onProfile: () =>
+                                  context.openShell('/family/profile'),
+                            ),
+                            const SizedBox(height: 16),
+                            _FamilyOverviewCard(overview: _familyOverview()),
+                            const SizedBox(height: 16),
+                            _FamilySnapshotSection(
+                              members: _snapshotMembers(),
+                              onOpenTree: () =>
+                                  context.openShell('/family/tree'),
+                            ),
+                            if (_recentPosts.isNotEmpty) ...[
+                              const SizedBox(height: 18),
+                              _LatestFromFamily(
+                                posts: _recentPosts,
+                                onOpenFeed: () =>
+                                    context.openShell('/family/media'),
+                              ),
+                            ],
+                            if (_notifications.isNotEmpty) ...[
+                              const SizedBox(height: 18),
+                              Text(
+                                'Activity',
+                                style: AppTheme.body(
+                                  weight: FontWeight.w800,
+                                  size: 15,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              ..._notifications.take(4).map((n) {
+                                final id = (n['id'] ?? '').toString();
+                                final isRead = n['is_read'] == true ||
+                                    n['isRead'] == true;
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: Material(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: InkWell(
+                                      borderRadius: BorderRadius.circular(16),
+                                      onTap: id.isEmpty
+                                          ? null
+                                          : () async {
+                                              try {
+                                                await context
+                                                    .read<FamilyApiService>()
+                                                    .markNotificationRead(id);
+                                                if (!mounted) return;
+                                                setState(() {
+                                                  _notifications =
+                                                      _notifications
+                                                          .where(
+                                                            (item) =>
+                                                                (item['id'] ??
+                                                                        '')
+                                                                    .toString() !=
+                                                                id,
+                                                          )
+                                                          .toList();
+                                                });
+                                              } catch (_) {}
+                                            },
+                                      child: Container(
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          borderRadius:
+                                              BorderRadius.circular(16),
+                                          border: Border.all(
+                                            color: const Color(0xFFD7E5DC),
                                           ),
-                                          const SizedBox(width: 10),
-                                          Expanded(
-                                            child: Text(
-                                              (n['message'] ??
-                                                      n['title'] ??
-                                                      'Notice')
-                                                  .toString(),
-                                              style: AppTheme.body(
-                                                size: 13,
-                                                weight: isRead
-                                                    ? FontWeight.w400
-                                                    : FontWeight.w600,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              isRead
+                                                  ? Icons
+                                                      .notifications_none_outlined
+                                                  : Icons.notifications_outlined,
+                                              color: AppTheme.forest,
+                                              size: 18,
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Text(
+                                                (n['message'] ??
+                                                        n['title'] ??
+                                                        'Notice')
+                                                    .toString(),
+                                                style: AppTheme.body(
+                                                  size: 13,
+                                                  weight: isRead
+                                                      ? FontWeight.w400
+                                                      : FontWeight.w600,
+                                                ),
                                               ),
                                             ),
-                                          ),
-                                          if (!isRead)
-                                            Icon(
-                                              Icons.circle,
-                                              size: 8,
-                                              color: AppTheme.forest,
-                                            ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
-                              );
-                            },
-                          ),
-                    ],
-                    const SizedBox(height: 24),
-                  ],
-                ),
+                                );
+                              }),
+                            ],
+                          ],
+                        ),
+                      ),
               ),
+            ],
+          ),
+          Positioned(
+            right: 18,
+            bottom: 18 + MediaQuery.paddingOf(context).bottom,
+            child: FloatingActionButton(
+              heroTag: 'dashboard-chat-fab',
+              tooltip: 'Chat',
+              onPressed: () => context.openShell('/family/chat'),
+              backgroundColor: AppTheme.forest,
+              foregroundColor: Colors.white,
+              elevation: 6,
+              child: const Icon(Icons.chat_bubble_rounded),
             ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-/// Proper welcome card: opaque text panel + right-side banner art only.
-/// Default PNG has baked "Ankesh Prasad" on the left — that side is never shown.
-class _DashboardHero extends StatelessWidget {
-  const _DashboardHero({
+class _WelcomeHero extends StatelessWidget {
+  const _WelcomeHero({
     required this.userName,
-    this.familyName,
-    this.bannerUrl,
+    this.polaroidUrl,
   });
 
-  final String? userName;
-  final String? familyName;
-  final String? bannerUrl;
+  final String userName;
+  final String? polaroidUrl;
 
   @override
   Widget build(BuildContext context) {
-    final phone = context.isPhone;
-    final usingFamilyPhoto = bannerUrl != null;
-
     return Container(
       width: double.infinity,
+      height: 132,
       decoration: BoxDecoration(
-        color: AppTheme.card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFD1FAE5)),
+        borderRadius: BorderRadius.circular(22),
+        gradient: const LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [
+            Color(0xFF2F6B4F),
+            Color(0xFF3D8B63),
+            Color(0xFF4FA37A),
+          ],
+        ),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF3D2914).withValues(alpha: 0.06),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+            color: const Color(0xFF2F6B4F).withValues(alpha: 0.28),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              flex: phone ? 58 : 52,
-              child: Container(
-                color: usingFamilyPhoto
-                    ? const Color(0xFF0F172A)
-                    : Colors.white,
-                padding: EdgeInsets.fromLTRB(
-                  phone ? 14 : 20,
-                  phone ? 12 : 16,
-                  phone ? 8 : 12,
-                  phone ? 12 : 16,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'Welcome back, ${userName ?? 'there'}',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTheme.display(
-                        size: phone ? 18 : 22,
-                        color: usingFamilyPhoto
-                            ? Colors.white
-                            : const Color(0xFF1E293B),
-                      ),
-                    ),
-                    if (familyName != null &&
-                        familyName!.trim().isNotEmpty) ...[
-                      const SizedBox(height: 3),
+      child: Stack(
+        children: [
+          Positioned(
+            left: -10,
+            bottom: -16,
+            child: Opacity(
+              opacity: 0.35,
+              child: Icon(
+                Icons.park_rounded,
+                size: 120,
+                color: Colors.white.withValues(alpha: 0.9),
+              ),
+            ),
+          ),
+          Positioned(
+            right: -20,
+            top: -30,
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.08),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 14, 14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
                       Text(
-                        familyName!,
+                        'Welcome back, $userName 👋',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppTheme.body(
-                          size: 12,
-                          weight: FontWeight.w700,
-                          color: usingFamilyPhoto
-                              ? const Color(0xFFD1FAE5)
-                              : AppTheme.emerald600,
+                        style: AppTheme.display(
+                          size: 20,
+                          color: Colors.white,
                         ),
                       ),
-                    ],
-                    const SizedBox(height: 5),
-                    Text(
-                      '“Family is not an important thing, it\'s everything.”',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTheme.body(
-                        size: 11,
-                        color: usingFamilyPhoto
-                            ? Colors.white.withValues(alpha: 0.9)
-                            : const Color(0xFF475569),
-                      ).copyWith(fontStyle: FontStyle.italic),
-                    ),
-                    if (!phone) ...[
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 6),
                       Text(
-                        'Manage your family, preserve your roots, and keep everyone connected.',
+                        '“Family is not an important thing, it’s everything.”',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: AppTheme.body(
-                          size: 11,
-                          color: usingFamilyPhoto
-                              ? Colors.white.withValues(alpha: 0.8)
-                              : const Color(0xFF64748B),
-                        ),
+                          size: 12,
+                          color: Colors.white.withValues(alpha: 0.92),
+                        ).copyWith(fontStyle: FontStyle.italic),
                       ),
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            ),
-            Expanded(
-              flex: phone ? 42 : 48,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: phone ? 112 : 132),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Image(
-                      image: usingFamilyPhoto
-                          ? NetworkImage(bannerUrl!)
-                          : const AssetImage(
-                              'assets/images/family-banner-default.png',
-                            ) as ImageProvider,
-                      fit: BoxFit.cover,
-                      alignment: usingFamilyPhoto
-                          ? Alignment.center
-                          : Alignment.centerRight,
-                      errorBuilder: (_, __, ___) => Image.asset(
-                        'assets/images/family-banner-default.png',
-                        fit: BoxFit.cover,
-                        alignment: Alignment.centerRight,
-                      ),
-                    ),
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                          colors: usingFamilyPhoto
-                              ? [
-                                  const Color(0xFF0F172A),
-                                  const Color(0xFF0F172A)
-                                      .withValues(alpha: 0.35),
-                                  Colors.transparent,
-                                ]
-                              : [
-                                  Colors.white,
-                                  Colors.white.withValues(alpha: 0.55),
-                                  Colors.transparent,
-                                ],
+                const SizedBox(width: 10),
+                Transform.rotate(
+                  angle: 0.08,
+                  child: Container(
+                    width: 72,
+                    height: 86,
+                    padding: const EdgeInsets.fromLTRB(5, 5, 5, 14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 10,
+                          offset: const Offset(2, 4),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: polaroidUrl != null
+                                ? Image.network(
+                                    polaroidUrl!,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) =>
+                                        _polaroidFallback(),
+                                  )
+                                : _polaroidFallback(),
+                          ),
+                        ),
+                        Positioned(
+                          right: 2,
+                          bottom: -2,
+                          child: Icon(
+                            Icons.favorite_rounded,
+                            size: 14,
+                            color: const Color(0xFFE11D48).withValues(alpha: 0.9),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _polaroidFallback() {
+    return Container(
+      color: const Color(0xFFE8F5E9),
+      alignment: Alignment.center,
+      child: Text(
+        userName.isNotEmpty ? userName[0].toUpperCase() : '?',
+        style: AppTheme.display(size: 28, color: AppTheme.forest),
       ),
     );
   }
 }
 
-class _ActionChip extends StatelessWidget {
-  const _ActionChip(this.icon, this.label, this.onTap);
+class _QuickActionsGrid extends StatelessWidget {
+  const _QuickActionsGrid({
+    required this.onTree,
+    required this.onFeed,
+    required this.onChat,
+    required this.onEvents,
+    required this.onMap,
+    required this.onProfile,
+  });
+
+  final VoidCallback onTree;
+  final VoidCallback onFeed;
+  final VoidCallback onChat;
+  final VoidCallback onEvents;
+  final VoidCallback onMap;
+  final VoidCallback onProfile;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = <(IconData, String, Color, Color, VoidCallback)>[
+      (
+        Icons.account_tree_rounded,
+        'Tree',
+        const Color(0xFFE8F5E9),
+        const Color(0xFF2E7D32),
+        onTree,
+      ),
+      (
+        Icons.auto_awesome_mosaic_rounded,
+        'Feed',
+        const Color(0xFFE3F2FD),
+        const Color(0xFF1565C0),
+        onFeed,
+      ),
+      (
+        Icons.chat_bubble_rounded,
+        'Chat',
+        const Color(0xFFFCE4EC),
+        const Color(0xFFC2185B),
+        onChat,
+      ),
+      (
+        Icons.event_rounded,
+        'Events',
+        const Color(0xFFFFF3E0),
+        const Color(0xFFEF6C00),
+        onEvents,
+      ),
+      (
+        Icons.map_rounded,
+        'Map',
+        const Color(0xFFF3E5F5),
+        const Color(0xFF7B1FA2),
+        onMap,
+      ),
+      (
+        Icons.person_rounded,
+        'Profile',
+        const Color(0xFFE0F2F1),
+        const Color(0xFF00796B),
+        onProfile,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 10.0;
+        final w = (constraints.maxWidth - gap) / 2;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final item in items)
+              SizedBox(
+                width: w,
+                child: _QuickActionTile(
+                  icon: item.$1,
+                  label: item.$2,
+                  soft: item.$3,
+                  accent: item.$4,
+                  onTap: item.$5,
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _QuickActionTile extends StatelessWidget {
+  const _QuickActionTile({
+    required this.icon,
+    required this.label,
+    required this.soft,
+    required this.accent,
+    required this.onTap,
+  });
 
   final IconData icon;
   final String label;
+  final Color soft;
+  final Color accent;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppTheme.card,
-      borderRadius: BorderRadius.circular(14),
+      color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         child: Ink(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppTheme.borderSoft),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: AppTheme.forest, size: 22),
-              const SizedBox(height: 6),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: AppTheme.body(weight: FontWeight.w700, size: 12),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFE2EDE6)),
+            boxShadow: [
+              BoxShadow(
+                color: accent.withValues(alpha: 0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MiniTreePreview extends StatelessWidget {
-  const _MiniTreePreview({
-    required this.grandparents,
-    required this.parents,
-    required this.bottom,
-  });
-
-  final List<FamilyMember> grandparents;
-  final List<FamilyMember> parents;
-  final List<FamilyMember> bottom;
-
-  @override
-  Widget build(BuildContext context) {
-    Widget row(List<FamilyMember> list, {String empty = ''}) {
-      if (list.isEmpty) {
-        return Text(
-          empty,
-          style: AppTheme.body(size: 11, color: AppTheme.muted),
-        );
-      }
-      return Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        alignment: WrapAlignment.center,
-        children: list.map((m) => _MiniNode(member: m)).toList(),
-      );
-    }
-
-    return Column(
-      children: [
-        row(grandparents, empty: 'Add grandparents from Family Tree'),
-        if (grandparents.isNotEmpty || parents.isNotEmpty)
-          Container(
-            width: 2,
-            height: 12,
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            color: const Color(0xFF34D399),
-          ),
-        row(parents, empty: 'Add parents from Family Tree'),
-        if (parents.isNotEmpty || bottom.isNotEmpty)
-          Container(
-            width: 2,
-            height: 12,
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            color: const Color(0xFF34D399),
-          ),
-        row(bottom),
-      ],
-    );
-  }
-}
-
-class _MiniNode extends StatelessWidget {
-  const _MiniNode({required this.member});
-
-  final FamilyMember member;
-
-  @override
-  Widget build(BuildContext context) {
-    final isMe =
-        (member.relationship ?? '').toLowerCase().replaceAll(' ', '') ==
-            'sitecreator';
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: 120, maxWidth: 150),
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: AppTheme.card,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isMe ? AppTheme.forest : AppTheme.borderSoft,
-            width: isMe ? 1.5 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 14,
-              backgroundColor: AppTheme.emerald100,
-              child: Text(
-                isMe
-                    ? 'ME'
-                    : (member.name.isNotEmpty
-                        ? member.name[0].toUpperCase()
-                        : '?'),
-                style: AppTheme.body(
-                  size: isMe ? 9 : 11,
-                  weight: FontWeight.w800,
-                  color: AppTheme.forest,
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: soft,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: accent, size: 22),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  style: AppTheme.body(weight: FontWeight.w800, size: 14),
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    member.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTheme.body(size: 12, weight: FontWeight.w700),
-                  ),
-                  Text(
-                    member.relationship ?? '',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTheme.body(size: 10, color: AppTheme.muted),
-                  ),
-                ],
-              ),
-            ),
-          ],
+              Icon(Icons.chevron_right_rounded, color: AppTheme.muted),
+            ],
+          ),
         ),
       ),
     );
@@ -937,27 +868,57 @@ class _FamilyOverviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final male = overview['male'] as int? ?? 0;
     final female = overview['female'] as int? ?? 0;
-    final malePct = male + female == 0 ? 50 : (overview['malePct'] as int? ?? 50);
+    final malePct =
+        male + female == 0 ? 50 : (overview['malePct'] as int? ?? 50);
     final femalePct = male + female == 0 ? 50 : 100 - malePct;
     final oldest = overview['oldest'] as Map?;
     final youngest = overview['youngest'] as Map?;
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppTheme.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.borderSoft),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFD7E5DC)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1F2A24).withValues(alpha: 0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Family overview',
-            style: AppTheme.body(weight: FontWeight.w800, size: 13),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Family overview',
+                  style: AppTheme.body(weight: FontWeight.w800, size: 15),
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '$male Male • $female Female',
+                  style: AppTheme.body(
+                    size: 11,
+                    weight: FontWeight.w700,
+                    color: AppTheme.mutedSoft,
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
           ClipRRect(
             borderRadius: BorderRadius.circular(999),
             child: SizedBox(
@@ -976,21 +937,7 @@ class _FamilyOverviewCard extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Text(
-                '$male Male',
-                style: AppTheme.body(size: 12, weight: FontWeight.w700),
-              ),
-              const Spacer(),
-              Text(
-                '$female Female',
-                style: AppTheme.body(size: 12, weight: FontWeight.w700),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Text(
             'Oldest: ${oldest == null ? '—' : '${oldest['name']} (${oldest['label']})'}',
             style: AppTheme.body(size: 12, color: AppTheme.mutedSoft),
@@ -1000,6 +947,380 @@ class _FamilyOverviewCard extends StatelessWidget {
             'Youngest: ${youngest == null ? '—' : '${youngest['name']} (${youngest['label']})'}',
             style: AppTheme.body(size: 12, color: AppTheme.mutedSoft),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FamilySnapshotSection extends StatelessWidget {
+  const _FamilySnapshotSection({
+    required this.members,
+    required this.onOpenTree,
+  });
+
+  final List<FamilyMember> members;
+  final VoidCallback onOpenTree;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 12, 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFD7E5DC)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Family snapshot',
+                  style: AppTheme.body(weight: FontWeight.w800, size: 15),
+                ),
+              ),
+              TextButton(
+                onPressed: onOpenTree,
+                child: Text(
+                  'Open tree →',
+                  style: AppTheme.body(
+                    weight: FontWeight.w700,
+                    color: AppTheme.forest,
+                    size: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (members.isEmpty)
+            Text(
+              'Add relatives on your tree to see a snapshot here.',
+              style: AppTheme.body(size: 12, color: AppTheme.muted),
+            )
+          else
+            SizedBox(
+              height: 96,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: members.length,
+                separatorBuilder: (_, __) => Padding(
+                  padding: const EdgeInsets.only(top: 28),
+                  child: Container(
+                    width: 18,
+                    height: 2,
+                    color: AppTheme.forest.withValues(alpha: 0.35),
+                  ),
+                ),
+                itemBuilder: (_, i) {
+                  final m = members[i];
+                  final isMe =
+                      _normRel(m.relationship) == 'sitecreator';
+                  final url = mediaUrl(m.avatar);
+                  return SizedBox(
+                    width: 72,
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(2.5),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isMe
+                                  ? AppTheme.forest
+                                  : const Color(0xFFD7E5DC),
+                              width: isMe ? 2.2 : 1.2,
+                            ),
+                          ),
+                          child: CircleAvatar(
+                            radius: 24,
+                            backgroundColor:
+                                AppTheme.forest.withValues(alpha: 0.1),
+                            backgroundImage:
+                                url != null ? NetworkImage(url) : null,
+                            child: url == null
+                                ? Text(
+                                    m.name.isNotEmpty
+                                        ? m.name[0].toUpperCase()
+                                        : '?',
+                                    style: AppTheme.body(
+                                      weight: FontWeight.w800,
+                                      color: AppTheme.forest,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          m.name.split(' ').first,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTheme.body(
+                            size: 12,
+                            weight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          isMe
+                              ? 'You'
+                              : (m.relationship ?? 'Member'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTheme.body(
+                            size: 10,
+                            color: AppTheme.muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _normRel(String? rel) =>
+      (rel ?? '').toLowerCase().replaceAll(RegExp(r'\s+'), '');
+}
+
+class _LatestFromFamily extends StatelessWidget {
+  const _LatestFromFamily({
+    required this.posts,
+    required this.onOpenFeed,
+  });
+
+  final List<Map<String, dynamic>> posts;
+  final VoidCallback onOpenFeed;
+
+  String? _url(Map<String, dynamic> item) => mediaUrl(
+        (item['url'] ??
+                item['image'] ??
+                item['path'] ??
+                item['file_path'] ??
+                item['filePath'])
+            ?.toString(),
+      );
+
+  String _title(Map<String, dynamic> item) {
+    final caption = (item['caption'] ?? '').toString().trim();
+    if (caption.isNotEmpty) return caption;
+    final user = item['user'] is Map
+        ? Map<String, dynamic>.from(item['user'] as Map)
+        : null;
+    final author = (item['authorName'] ??
+            item['uploadedByName'] ??
+            user?['name'] ??
+            'Family')
+        .toString();
+    return '$author shared a moment';
+  }
+
+  String _date(Map<String, dynamic> item) {
+    final raw =
+        item['createdAt'] ?? item['created_at'] ?? item['uploadedAt'];
+    final when = DateTime.tryParse('$raw');
+    if (when == null) return '';
+    return DateFormat.MMMd().add_y().format(when.toLocal());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Latest from family',
+                style: AppTheme.body(weight: FontWeight.w800, size: 15),
+              ),
+            ),
+            TextButton(
+              onPressed: onOpenFeed,
+              child: Text(
+                'See all →',
+                style: AppTheme.body(
+                  weight: FontWeight.w700,
+                  color: AppTheme.forest,
+                  size: 13,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 148,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: posts.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            itemBuilder: (_, i) {
+              final post = posts[i];
+              final url = _url(post);
+              return InkWell(
+                onTap: onOpenFeed,
+                borderRadius: BorderRadius.circular(18),
+                child: Container(
+                  width: 190,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (url != null)
+                        Image.network(
+                          url,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            color: AppTheme.cream,
+                          ),
+                        )
+                      else
+                        Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                AppTheme.forest,
+                                AppTheme.emerald600,
+                              ],
+                            ),
+                          ),
+                        ),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              Colors.black.withValues(alpha: 0.72),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 12,
+                        right: 12,
+                        bottom: 12,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _title(post),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTheme.body(
+                                size: 13,
+                                weight: FontWeight.w800,
+                                color: Colors.white,
+                              ),
+                            ),
+                            if (_date(post).isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                _date(post),
+                                style: AppTheme.body(
+                                  size: 11,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _InvitesCard extends StatelessWidget {
+  const _InvitesCard({
+    required this.invites,
+    required this.onAccept,
+    required this.onReject,
+  });
+
+  final List<Map<String, dynamic>> invites;
+  final Future<void> Function(String id) onAccept;
+  final Future<void> Function(String id) onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    return FtSectionCard(
+      color: AppTheme.amber50,
+      borderColor: AppTheme.amber200,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Invitations for you',
+            style: AppTheme.body(weight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          ...invites.map((inv) {
+            final id = (inv['id'] ?? '').toString();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.card,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.amber200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${inv['invitedBy'] ?? 'A family admin'} invited you to ${inv['familyName'] ?? 'a family'} as ${inv['relationship'] ?? 'member'}',
+                      style: AppTheme.body(size: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        FilledButton(
+                          onPressed: () => onAccept(id),
+                          child: const Text('Accept'),
+                        ),
+                        OutlinedButton(
+                          onPressed: () => onReject(id),
+                          child: const Text('Reject'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
         ],
       ),
     );

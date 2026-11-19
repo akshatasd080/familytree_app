@@ -3,8 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
-import '../../../../core/widgets/ft_page.dart';
+import '../../../../core/widgets/ft_widgets.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
+import '../../../settings/presentation/providers/theme_settings_provider.dart';
 import '../../data/family_api_service.dart';
 import '../../data/models/family_models.dart';
 import '../../domain/ego_tree.dart';
@@ -651,6 +652,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeSettingsProvider>();
     final session = context.watch<FamilySessionProvider>();
     final auth = context.watch<AuthProvider>();
     final hint = _isAdmin
@@ -659,45 +661,97 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
             ? 'Tap green + on a person to add their relative.'
             : 'Switch to My circle to add people near you.';
     final members = _tree?.members ?? const <FamilyMember>[];
+    final wide = MediaQuery.sizeOf(context).width >= 840;
+    final canOpenDrawer = !wide && Scaffold.maybeOf(context)?.hasDrawer == true;
 
     return Stack(
       children: [
-        FtPage(
-          title: 'Family Tree',
-          actions: [
-            if (!_loading && _error == null) ...[
-              IconButton(
-                tooltip: 'Download',
-                onPressed: _downloading || members.isEmpty ? null : _download,
-                icon: _downloading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.download_outlined),
-              ),
-            ],
-            IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
-          ],
-          body: _loading
-              ? const Center(child: CircularProgressIndicator())
-              : _error != null
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          _error!,
-                          textAlign: TextAlign.center,
-                          style: AppTheme.body(color: Colors.red),
+        Material(
+          color: const Color(0xFFF4F8F5),
+          child: Column(
+            children: [
+              SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(canOpenDrawer ? 2 : 12, 4, 6, 8),
+                  child: Row(
+                    children: [
+                      if (canOpenDrawer)
+                        IconButton(
+                          tooltip: 'Menu',
+                          onPressed: () => Scaffold.of(context).openDrawer(),
+                          icon: Icon(Icons.menu_rounded, color: AppTheme.ink),
+                        ),
+                      const FtBrandMark(size: 36),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Family Tree',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTheme.display(size: 20),
+                            ),
+                            Text(
+                              'Our Family • Our Roots • Forever ❤️',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTheme.body(
+                                size: 11,
+                                color: AppTheme.muted,
+                                weight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    )
-                  : LayoutBuilder(
-                      builder: (context, bodyConstraints) {
-                        final maxToolbar =
-                            (bodyConstraints.maxHeight * 0.36).clamp(120.0, 320.0);
-                        final graphChild = members.isEmpty
+                      if (!_loading && _error == null)
+                        IconButton(
+                          tooltip: 'Download',
+                          onPressed:
+                              _downloading || members.isEmpty ? null : _download,
+                          icon: _downloading
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.download_outlined,
+                                  color: AppTheme.ink,
+                                ),
+                        ),
+                      IconButton(
+                        onPressed: _load,
+                        icon: Icon(Icons.refresh_rounded, color: AppTheme.ink),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Expanded(
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _error != null
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Text(
+                                _error!,
+                                textAlign: TextAlign.center,
+                                style: AppTheme.body(color: Colors.red),
+                              ),
+                            ),
+                          )
+                        : LayoutBuilder(
+                            builder: (context, bodyConstraints) {
+                              final maxToolbar = (bodyConstraints.maxHeight * 0.38)
+                                  .clamp(120.0, 340.0);
+                              final graphChild = members.isEmpty
                             ? Center(
                                 child: Padding(
                                   padding: const EdgeInsets.all(24),
@@ -872,72 +926,90 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      crossAxisAlignment:
-                                          WrapCrossAlignment.center,
-                                      children: [
-                                        if (_isAdmin) ...[
-                                          const Text(
-                                            'VIEW AS',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w800,
-                                              color: Color(0xFF047857),
-                                            ),
-                                          ),
-                                          SizedBox(
-                                            width: 170,
-                                            child: Builder(
-                                              builder: (context) {
-                                                final values = <String>{
-                                                  for (final m in members)
-                                                    m.userId ?? m.id,
-                                                };
-                                                final current = values.contains(
-                                                  _focusId,
-                                                )
-                                                    ? _focusId
-                                                    : (values.isEmpty
-                                                        ? null
-                                                        : values.first);
-                                                return DropdownButtonFormField<
-                                                    String>(
-                                                  value: current,
-                                                  isExpanded: true,
-                                                  decoration:
-                                                      const InputDecoration(
-                                                    isDense: true,
-                                                    contentPadding:
-                                                        EdgeInsets.symmetric(
-                                                      horizontal: 10,
-                                                      vertical: 8,
-                                                    ),
+                                    if (_isAdmin) ...[
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 8,
+                                        crossAxisAlignment:
+                                            WrapCrossAlignment.center,
+                                        children: [
+                                          Builder(
+                                            builder: (context) {
+                                              final values = <String>{
+                                                for (final m in members)
+                                                  m.userId ?? m.id,
+                                              };
+                                              final current =
+                                                  values.contains(_focusId)
+                                                      ? _focusId
+                                                      : (values.isEmpty
+                                                          ? null
+                                                          : values.first);
+                                              return Container(
+                                                width: 190,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 10,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFFF7FBF8),
+                                                  borderRadius:
+                                                      BorderRadius.circular(999),
+                                                  border: Border.all(
+                                                    color:
+                                                        const Color(0xFFD7E5DC),
                                                   ),
-                                                  items: [
-                                                    for (final m in members)
-                                                      DropdownMenuItem(
-                                                        value:
-                                                            m.userId ?? m.id,
-                                                        child: Text(
-                                                          '${m.name}${_isMyMember(m) ? ' (You)' : ''}',
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                        ),
+                                                ),
+                                                child:
+                                                    DropdownButtonHideUnderline(
+                                                  child: DropdownButton<String>(
+                                                    value: current,
+                                                    isExpanded: true,
+                                                    isDense: true,
+                                                    icon: Icon(
+                                                      Icons
+                                                          .keyboard_arrow_down_rounded,
+                                                      color: AppTheme.forest,
+                                                    ),
+                                                    hint: Text(
+                                                      'View As',
+                                                      style: AppTheme.body(
+                                                        size: 12,
+                                                        weight: FontWeight.w700,
                                                       ),
-                                                  ],
-                                                  onChanged: (v) {
-                                                    if (v == null) return;
-                                                    setState(() {
-                                                      _focusOverrideId = v;
-                                                      _selected = null;
-                                                      _generationFilter = 'all';
-                                                    });
-                                                  },
-                                                );
-                                              },
-                                            ),
+                                                    ),
+                                                    items: [
+                                                      for (final m in members)
+                                                        DropdownMenuItem(
+                                                          value:
+                                                              m.userId ?? m.id,
+                                                          child: Text(
+                                                            'View As: ${m.name}${_isMyMember(m) ? ' (You)' : ''}',
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                            style:
+                                                                AppTheme.body(
+                                                              size: 12,
+                                                              weight: FontWeight
+                                                                  .w700,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                    ],
+                                                    onChanged: (v) {
+                                                      if (v == null) return;
+                                                      setState(() {
+                                                        _focusOverrideId = v;
+                                                        _selected = null;
+                                                        _generationFilter =
+                                                            'all';
+                                                      });
+                                                    },
+                                                  ),
+                                                ),
+                                              );
+                                            },
                                           ),
                                           if (!_viewingSelf)
                                             OutlinedButton.icon(
@@ -953,44 +1025,38 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                               label: const Text('My tree'),
                                             ),
                                         ],
-                                        _ViewModeToggle(
-                                          mode: _viewMode,
-                                          onChanged: (mode) =>
-                                              setState(() => _viewMode = mode),
-                                        ),
-                                        Wrap(
-                                          spacing: 8,
-                                          runSpacing: 8,
-                                          crossAxisAlignment:
-                                              WrapCrossAlignment.center,
-                                          children: [
-                                            _ModeToggle(
-                                              left: 'Complete tree',
-                                              right: 'My circle',
-                                              leftSelected: _scope == 'full',
-                                              filled: true,
-                                              onLeft: () {
-                                                if (_scope == 'full') return;
-                                                setState(() => _scope = 'full');
-                                                _load();
-                                              },
-                                              onRight: () {
-                                                if (_scope == 'near') return;
-                                                setState(() => _scope = 'near');
-                                                _load();
-                                              },
+                                      ),
+                                      const SizedBox(height: 10),
+                                    ],
+                                    SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: Row(
+                                        children: [
+                                          _ViewModeToggle(
+                                            mode: _viewMode,
+                                            onChanged: (mode) => setState(
+                                              () => _viewMode = mode,
                                             ),
-                                            OutlinedButton.icon(
-                                              onPressed: _pickTreeTheme,
-                                              icon: const Icon(
-                                                Icons.palette_outlined,
-                                                size: 16,
-                                              ),
-                                              label: Text(_treeTheme.label),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
+                                          ),
+                                          const SizedBox(width: 14),
+                                          _ModeToggle(
+                                            left: 'Complete Tree',
+                                            right: 'My Circle',
+                                            leftSelected: _scope == 'full',
+                                            filled: true,
+                                            onLeft: () {
+                                              if (_scope == 'full') return;
+                                              setState(() => _scope = 'full');
+                                              _load();
+                                            },
+                                            onRight: () {
+                                              if (_scope == 'near') return;
+                                              setState(() => _scope = 'near');
+                                              _load();
+                                            },
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                     const SizedBox(height: 8),
                                     Stack(
@@ -1005,12 +1071,23 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                           decoration: InputDecoration(
                                             hintText: 'Search name or mobile…',
                                             isDense: true,
-                                            prefixIcon: const Icon(
-                                              Icons.search,
+                                            filled: true,
+                                            fillColor: const Color(0xFFF7FBF8),
+                                            prefixIcon: Icon(
+                                              Icons.search_rounded,
                                               size: 18,
+                                              color: AppTheme.muted,
                                             ),
                                             suffixIcon: _search.text.isEmpty
-                                                ? null
+                                                ? IconButton(
+                                                    tooltip: 'Theme',
+                                                    onPressed: _pickTreeTheme,
+                                                    icon: Icon(
+                                                      Icons.tune_rounded,
+                                                      size: 18,
+                                                      color: AppTheme.muted,
+                                                    ),
+                                                  )
                                                 : IconButton(
                                                     icon: const Icon(
                                                       Icons.close,
@@ -1021,6 +1098,33 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                                       _searchOpen = false;
                                                     }),
                                                   ),
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 12,
+                                            ),
+                                            border: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(999),
+                                              borderSide: const BorderSide(
+                                                color: Color(0xFFD7E5DC),
+                                              ),
+                                            ),
+                                            enabledBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(999),
+                                              borderSide: const BorderSide(
+                                                color: Color(0xFFD7E5DC),
+                                              ),
+                                            ),
+                                            focusedBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(999),
+                                              borderSide: BorderSide(
+                                                color: AppTheme.forest,
+                                                width: 1.4,
+                                              ),
+                                            ),
                                           ),
                                           onSubmitted: (_) {
                                             final first = _searchMatches;
@@ -1251,11 +1355,21 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                             ],
                               ),
                             ),
-                            Expanded(child: graphChild),
-                          ],
-                        );
-                      },
-                    ),
+                              Expanded(
+                                child: ClipRRect(
+                                  borderRadius: const BorderRadius.vertical(
+                                    top: Radius.circular(18),
+                                  ),
+                                  child: graphChild,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
         ),
         if (!_loading && _error == null && session.familyId != null)
           FamilyChatDock(
@@ -1325,11 +1439,18 @@ class _ToolbarCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        color: Colors.white.withValues(alpha: 0.94),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFD7E5DC)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1F2A24).withValues(alpha: 0.05),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: child,
     );
@@ -1350,9 +1471,9 @@ class _ViewModeToggle extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        color: const Color(0xFFEDF5F0),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFFD7E5DC)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1368,18 +1489,19 @@ class _ViewModeToggle extends StatelessWidget {
   Widget _pill(String label, bool selected, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(999),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: selected ? Colors.white : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
+          color: selected ? AppTheme.forest : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 4,
+                    color: AppTheme.forest.withValues(alpha: 0.25),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
                   ),
                 ]
               : null,
@@ -1387,9 +1509,9 @@ class _ViewModeToggle extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 11,
+            fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: selected ? AppTheme.forest : AppTheme.muted,
+            color: selected ? Colors.white : AppTheme.muted,
           ),
         ),
       ),
@@ -1416,53 +1538,65 @@ class _ModeToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F5F9),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _pill(left, leftSelected, onLeft),
-          _pill(right, !leftSelected, onRight),
-        ],
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _chip(left, leftSelected, onLeft),
+        const SizedBox(width: 8),
+        _chip(right, !leftSelected, onRight),
+      ],
     );
   }
 
-  Widget _pill(String label, bool selected, VoidCallback onTap) {
+  Widget _chip(String label, bool selected, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(999),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 140),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: selected
               ? (filled ? AppTheme.forest : Colors.white)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: selected && !filled
+              : Colors.white,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: selected
+                ? AppTheme.forest
+                : const Color(0xFFD7E5DC),
+          ),
+          boxShadow: selected
               ? [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 4,
+                    color: AppTheme.forest.withValues(alpha: 0.18),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
                   ),
                 ]
               : null,
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: selected
-                ? (filled ? Colors.black : AppTheme.forest)
-                : AppTheme.muted,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (selected) ...[
+              Icon(
+                Icons.check_circle_rounded,
+                size: 14,
+                color: filled ? Colors.white : AppTheme.forest,
+              ),
+              const SizedBox(width: 5),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: selected
+                    ? (filled ? Colors.white : AppTheme.forest)
+                    : AppTheme.muted,
+              ),
+            ),
+          ],
         ),
       ),
     );
