@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
-import '../../../../core/widgets/ft_page.dart';
+import '../../../../core/widgets/ft_branded_page.dart';
 import '../../../../core/widgets/responsive.dart';
 import '../../data/family_api_service.dart';
 import '../../domain/profile_privacy.dart';
@@ -302,8 +302,9 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final url = mediaUrl(_avatar);
-    return FtPage(
+    return FtBrandedPage(
       title: 'Profile',
+      subtitle: 'Your story in the family',
       actions: [
         TextButton(
           onPressed: _saving ? null : _save,

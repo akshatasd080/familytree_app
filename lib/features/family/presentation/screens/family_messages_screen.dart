@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
-import '../../../../core/widgets/ft_page.dart';
+import '../../../../core/widgets/ft_branded_page.dart';
 import '../../data/family_api_service.dart';
 import '../../data/models/family_models.dart';
 import '../providers/family_providers.dart';
@@ -224,13 +224,14 @@ class _FamilyMessagesScreenState extends State<FamilyMessagesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return FtPage(
+    return FtBrandedPage(
       title: 'Notices',
+      subtitle: 'Important family updates',
       actions: [
         IconButton(
           tooltip: 'Refresh',
           onPressed: _bootstrap,
-          icon: const Icon(Icons.refresh),
+          icon: Icon(Icons.refresh_rounded, color: AppTheme.ink),
         ),
         if (_canPost)
           IconButton(

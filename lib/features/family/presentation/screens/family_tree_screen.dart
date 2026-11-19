@@ -1028,35 +1028,27 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                       ),
                                       const SizedBox(height: 10),
                                     ],
-                                    SingleChildScrollView(
-                                      scrollDirection: Axis.horizontal,
-                                      child: Row(
-                                        children: [
-                                          _ViewModeToggle(
-                                            mode: _viewMode,
-                                            onChanged: (mode) => setState(
-                                              () => _viewMode = mode,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 14),
-                                          _ModeToggle(
-                                            left: 'Complete Tree',
-                                            right: 'My Circle',
-                                            leftSelected: _scope == 'full',
-                                            filled: true,
-                                            onLeft: () {
-                                              if (_scope == 'full') return;
-                                              setState(() => _scope = 'full');
-                                              _load();
-                                            },
-                                            onRight: () {
-                                              if (_scope == 'near') return;
-                                              setState(() => _scope = 'near');
-                                              _load();
-                                            },
-                                          ),
-                                        ],
-                                      ),
+                                    _ViewModeToggle(
+                                      mode: _viewMode,
+                                      onChanged: (mode) =>
+                                          setState(() => _viewMode = mode),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    _ModeToggle(
+                                      left: 'Complete Tree',
+                                      right: 'My Circle',
+                                      leftSelected: _scope == 'full',
+                                      filled: true,
+                                      onLeft: () {
+                                        if (_scope == 'full') return;
+                                        setState(() => _scope = 'full');
+                                        _load();
+                                      },
+                                      onRight: () {
+                                        if (_scope == 'near') return;
+                                        setState(() => _scope = 'near');
+                                        _load();
+                                      },
                                     ),
                                     const SizedBox(height: 8),
                                     Stack(
@@ -1469,6 +1461,7 @@ class _ViewModeToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         color: const Color(0xFFEDF5F0),
@@ -1476,11 +1469,28 @@ class _ViewModeToggle extends StatelessWidget {
         border: Border.all(color: const Color(0xFFD7E5DC)),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          _pill('Diagram', mode == 'diagram', () => onChanged('diagram')),
-          _pill('List', mode == 'generations', () => onChanged('generations')),
-          _pill('Root', mode == 'root', () => onChanged('root')),
+          Expanded(
+            child: _pill(
+              'Diagram',
+              mode == 'diagram',
+              () => onChanged('diagram'),
+            ),
+          ),
+          Expanded(
+            child: _pill(
+              'List',
+              mode == 'generations',
+              () => onChanged('generations'),
+            ),
+          ),
+          Expanded(
+            child: _pill(
+              'Root',
+              mode == 'root',
+              () => onChanged('root'),
+            ),
+          ),
         ],
       ),
     );
@@ -1492,7 +1502,9 @@ class _ViewModeToggle extends StatelessWidget {
       borderRadius: BorderRadius.circular(999),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: selected ? AppTheme.forest : Colors.transparent,
           borderRadius: BorderRadius.circular(999),
@@ -1508,6 +1520,9 @@ class _ViewModeToggle extends StatelessWidget {
         ),
         child: Text(
           label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w700,
@@ -1539,11 +1554,10 @@ class _ModeToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
-        _chip(left, leftSelected, onLeft),
-        const SizedBox(width: 8),
-        _chip(right, !leftSelected, onRight),
+        Expanded(child: _chip(left, leftSelected, onLeft)),
+        const SizedBox(width: 10),
+        Expanded(child: _chip(right, !leftSelected, onRight)),
       ],
     );
   }
@@ -1554,16 +1568,16 @@ class _ModeToggle extends StatelessWidget {
       borderRadius: BorderRadius.circular(999),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: selected
               ? (filled ? AppTheme.forest : Colors.white)
               : Colors.white,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
-            color: selected
-                ? AppTheme.forest
-                : const Color(0xFFD7E5DC),
+            color: selected ? AppTheme.forest : const Color(0xFFD7E5DC),
           ),
           boxShadow: selected
               ? [
@@ -1576,6 +1590,7 @@ class _ModeToggle extends StatelessWidget {
               : null,
         ),
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
             if (selected) ...[
@@ -1586,14 +1601,18 @@ class _ModeToggle extends StatelessWidget {
               ),
               const SizedBox(width: 5),
             ],
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: selected
-                    ? (filled ? Colors.white : AppTheme.forest)
-                    : AppTheme.muted,
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: selected
+                      ? (filled ? Colors.white : AppTheme.forest)
+                      : AppTheme.muted,
+                ),
               ),
             ),
           ],

@@ -283,9 +283,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
 
     return Material(
-      color: const Color(0xFFF3F7F4),
+      color: const Color(0xFFF7F9F2),
       child: Stack(
         children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: 0.16,
+                child: Image.asset(
+                  'assets/images/tree_canvas_bg.jpg',
+                  fit: BoxFit.cover,
+                  alignment: Alignment.topCenter,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+            ),
+          ),
           Column(
             children: [
               SafeArea(

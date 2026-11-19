@@ -3,7 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../app/theme.dart';
-import '../../../../core/widgets/ft_page.dart';
+import '../../../../core/widgets/ft_branded_page.dart';
 import '../../../../core/widgets/responsive.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../data/family_api_service.dart';
@@ -460,16 +460,22 @@ class _FamilyEventsScreenState extends State<FamilyEventsScreen> {
     final daysInMonth = DateUtils.getDaysInMonth(_month.year, _month.month);
     final firstWeekday = DateTime(_month.year, _month.month, 1).weekday % 7;
 
-    return FtPage(
+    return FtBrandedPage(
       title: 'Events',
+      subtitle: 'Birthdays, anniversaries & celebrations',
       actions: [
-        IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+        IconButton(
+          onPressed: _load,
+          icon: Icon(Icons.refresh_rounded, color: AppTheme.ink),
+        ),
       ],
       floatingActionButton: _canAdd
           ? FloatingActionButton(
+              heroTag: 'events-add-fab',
               onPressed: () => _openEditor(),
               backgroundColor: AppTheme.forest,
-              child: const Icon(Icons.add, color: Colors.black),
+              foregroundColor: Colors.white,
+              child: const Icon(Icons.add_rounded),
             )
           : null,
       body: _loading

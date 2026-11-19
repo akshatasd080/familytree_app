@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
-import '../../../../core/widgets/ft_page.dart';
+import '../../../../core/widgets/ft_branded_page.dart';
 import '../../../../core/widgets/responsive.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../data/family_api_service.dart';
@@ -820,17 +820,22 @@ class _FamilyMembersScreenState extends State<FamilyMembersScreen> {
     final familyId = session.familyId;
     final isAdmin = _computeIsAdmin(session);
 
-    return FtPage(
+    return FtBrandedPage(
       title: 'Members',
+      subtitle: 'People & invites in your family',
       actions: [
-        IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+        IconButton(
+          onPressed: _load,
+          icon: Icon(Icons.refresh_rounded, color: AppTheme.ink),
+        ),
       ],
       floatingActionButton: isAdmin
           ? FloatingActionButton.extended(
+              heroTag: 'members-add-fab',
               onPressed: _addMember,
               backgroundColor: AppTheme.forest,
-              foregroundColor: Colors.black,
-              icon: const Icon(Icons.person_add),
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.person_add_alt_1_rounded),
               label: const Text('Add'),
             )
           : null,

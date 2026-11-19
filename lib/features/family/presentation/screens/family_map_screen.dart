@@ -9,7 +9,7 @@ import 'package:provider/provider.dart';
 import '../../../../app/router.dart';
 import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
-import '../../../../core/widgets/ft_page.dart';
+import '../../../../core/widgets/ft_branded_page.dart';
 import '../../data/family_api_service.dart';
 import '../../data/geocode_service.dart';
 import '../../data/models/family_models.dart';
@@ -208,15 +208,23 @@ class _FamilyMapScreenState extends State<FamilyMapScreen> {
     final showEmptyCta =
         !_loading && !_geoLoading && _pins.isEmpty && _withLocation.isEmpty;
 
-    return FtPage(
+    return FtBrandedPage(
       title: 'Family Map',
+      subtitle: 'Where our roots live today',
+      scenicBackground: false,
       actions: [
         TextButton.icon(
           onPressed: _pins.isEmpty ? null : _fitAll,
-          icon: const Icon(Icons.center_focus_strong, size: 18),
-          label: const Text('Fit all'),
+          icon: Icon(Icons.center_focus_strong, size: 18, color: AppTheme.forest),
+          label: Text(
+            'Fit all',
+            style: AppTheme.body(weight: FontWeight.w700, color: AppTheme.forest),
+          ),
         ),
-        IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+        IconButton(
+          onPressed: _load,
+          icon: Icon(Icons.refresh_rounded, color: AppTheme.ink),
+        ),
       ],
       body: _loading
           ? const Center(child: CircularProgressIndicator())

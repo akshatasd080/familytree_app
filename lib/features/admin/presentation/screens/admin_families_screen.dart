@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../../../core/widgets/ft_page.dart';
+import '../../../../app/theme.dart';
+import '../../../../core/widgets/ft_branded_page.dart';
 import '../../../../core/widgets/responsive.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../family/data/family_api_service.dart';
@@ -60,8 +61,9 @@ class _AdminFamiliesScreenState extends State<AdminFamiliesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return FtPage(
+    return FtBrandedPage(
       title: 'All Families',
+      subtitle: 'Super admin family control',
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -80,8 +82,15 @@ class _AdminFamiliesScreenState extends State<AdminFamiliesScreen> {
                   ..._families.map((f) {
                     final id = (f['id'] ?? '').toString();
                     final active = f['is_active'] != false && f['isActive'] != false;
-                    return SwitchListTile(
-                      title: Text(f['name']?.toString() ?? 'Family'),
+                    return FtSoftCard(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: SwitchListTile(
+                      activeThumbColor: AppTheme.forest,
+                      title: Text(
+                        f['name']?.toString() ?? 'Family',
+                        style: AppTheme.body(weight: FontWeight.w800),
+                      ),
                       subtitle: Text(id),
                       value: active,
                       onChanged: (v) async {
@@ -97,6 +106,7 @@ class _AdminFamiliesScreenState extends State<AdminFamiliesScreen> {
                           );
                         }
                       },
+                    ),
                     );
                   }),
                 ],

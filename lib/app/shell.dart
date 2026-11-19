@@ -101,10 +101,10 @@ class _AppShellState extends State<AppShell> {
           children: [
             if (wide)
               SizedBox(
-                width: 252,
+                width: 292,
                 child: Material(
                   elevation: 0,
-                  color: AppTheme.drawerBg,
+                  color: const Color(0xFFF7F9F2),
                   child: _AppDrawer(
                     familyName: family.current?.name ?? 'Family Tree',
                     userName: auth.user?.name ?? '',
@@ -155,123 +155,177 @@ class _AppDrawer extends StatelessWidget {
   final int messagesUnread;
   final bool permanent;
 
+  void _go(BuildContext context, String path) {
+    GoRouter.of(context).go(path);
+    if (!permanent && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final content = Column(
       children: [
+        _DrawerHeader(
+          familyName: familyName,
+          userName: userName,
+        ),
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: Row(
-                  children: [
-                    const FtBrandMark(size: 48),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            familyName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTheme.display(size: 18),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            userName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTheme.body(
-                              size: 13,
-                              color: AppTheme.muted,
-                            ),
-                          ),
-                        ],
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8F5E9),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: const Color(0xFFC8E6C9)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.eco_rounded, size: 14, color: AppTheme.forest),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Explore',
+                        style: AppTheme.body(
+                          size: 11,
+                          weight: FontWeight.w800,
+                          color: AppTheme.forest,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              const Divider(),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-                child: Text(
-                  'EXPLORE',
-                  style: AppTheme.body(
-                    size: 11,
-                    weight: FontWeight.w700,
-                    color: AppTheme.muted,
+                    ],
                   ),
                 ),
               ),
-              _item(context, Icons.dashboard_outlined, 'Home', '/dashboard'),
-              _item(context, Icons.account_tree_outlined, 'Tree', '/family/tree'),
+              const SizedBox(height: 10),
+              _item(context, Icons.home_rounded, 'Home', '/dashboard'),
+              _item(context, Icons.park_rounded, 'Tree', '/family/tree'),
               _item(
                 context,
-                Icons.auto_awesome_mosaic_outlined,
+                Icons.auto_awesome_mosaic_rounded,
                 'Feed',
                 '/family/media',
               ),
               _item(
                 context,
-                Icons.chat_bubble_outline_rounded,
+                Icons.chat_bubble_rounded,
                 'Chat',
                 '/family/chat',
               ),
               _item(
                 context,
-                Icons.campaign_outlined,
+                Icons.campaign_rounded,
                 'Notices',
                 '/family/messages',
                 badge: messagesUnread,
               ),
-              _item(context, Icons.person_outline, 'Profile', '/family/profile'),
-              _item(context, Icons.groups_outlined, 'Members', '/family/members'),
-              _item(context, Icons.map_outlined, 'Map', '/family/map'),
-              _item(context, Icons.event_outlined, 'Events', '/family/events'),
+              _item(context, Icons.person_rounded, 'Profile', '/family/profile'),
+              _item(context, Icons.groups_rounded, 'Members', '/family/members'),
+              _item(context, Icons.map_rounded, 'Map', '/family/map'),
+              _item(context, Icons.event_rounded, 'Events', '/family/events'),
               _item(
                 context,
-                Icons.admin_panel_settings_outlined,
+                Icons.admin_panel_settings_rounded,
                 'Family Admin',
                 '/family/admin',
               ),
               _item(
                 context,
-                Icons.privacy_tip_outlined,
+                Icons.privacy_tip_rounded,
                 'Privacy',
                 '/family/privacy',
               ),
               if (showAdminFamilies)
                 _item(
                   context,
-                  Icons.diversity_3,
+                  Icons.diversity_3_rounded,
                   'All Families',
                   '/admin/families',
                 ),
+              const SizedBox(height: 12),
+              _InviteBanner(
+                onInvite: () => _go(context, '/family/members'),
+              ),
             ],
           ),
         ),
-        const Divider(height: 1),
-        _item(context, Icons.settings_outlined, 'Settings', '/settings'),
-        ListTile(
-          leading: const Icon(Icons.logout, color: Colors.redAccent, size: 22),
-          title: Text(
-            'Logout',
-            style: AppTheme.body(
-              size: 16,
-              weight: FontWeight.w700,
-              color: Colors.redAccent,
-            ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+          child: Column(
+            children: [
+              _item(
+                context,
+                Icons.settings_rounded,
+                'Settings',
+                '/settings',
+              ),
+              Material(
+                color: const Color(0xFFFFF1F2),
+                borderRadius: BorderRadius.circular(14),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () {
+                    if (!permanent) Navigator.pop(context);
+                    onLogout();
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.logout_rounded,
+                          color: Color(0xFFE11D48),
+                          size: 22,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Logout',
+                            style: AppTheme.body(
+                              size: 15,
+                              weight: FontWeight.w800,
+                              color: const Color(0xFFE11D48),
+                            ),
+                          ),
+                        ),
+                        const Icon(
+                          Icons.chevron_right_rounded,
+                          color: Color(0xFFE11D48),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-          onTap: () {
-            if (!permanent) Navigator.pop(context);
-            onLogout();
-          },
         ),
-        const SizedBox(height: 8),
+        SizedBox(
+          height: 34,
+          child: Stack(
+            alignment: Alignment.bottomCenter,
+            children: [
+              Positioned.fill(
+                child: CustomPaint(painter: _HillPainter()),
+              ),
+              Positioned(
+                bottom: 6,
+                child: Icon(
+                  Icons.favorite_rounded,
+                  size: 14,
+                  color: Colors.white.withValues(alpha: 0.95),
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
 
@@ -279,8 +333,8 @@ class _AppDrawer extends StatelessWidget {
       return SafeArea(child: content);
     }
     return Drawer(
-      width: MediaQuery.sizeOf(context).width * 0.78,
-      backgroundColor: AppTheme.drawerBg,
+      width: MediaQuery.sizeOf(context).width * 0.82,
+      backgroundColor: const Color(0xFFF7F9F2),
       child: SafeArea(child: content),
     );
   }
@@ -296,45 +350,273 @@ class _AppDrawer extends StatelessWidget {
     final active =
         loc == path || (path != '/dashboard' && loc.startsWith(path));
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      child: ListTile(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        selected: active,
-        selectedTileColor: AppTheme.forest.withValues(alpha: 0.14),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
-        leading: Icon(
-          icon,
-          size: 22,
-          color: active ? AppTheme.forest : AppTheme.muted,
-        ),
-        title: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: AppTheme.body(
-            size: 15,
-            weight: FontWeight.w700,
-            color: active ? AppTheme.forest : AppTheme.inkSoft,
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Material(
+        color: active
+            ? AppTheme.forest.withValues(alpha: 0.12)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () => _go(context, path),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: active
+                        ? AppTheme.forest.withValues(alpha: 0.16)
+                        : const Color(0xFFE8F0EA),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 18,
+                    color: active ? AppTheme.forest : AppTheme.forestDark,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.body(
+                      size: 15,
+                      weight: FontWeight.w700,
+                      color: active ? AppTheme.forest : AppTheme.inkSoft,
+                    ),
+                  ),
+                ),
+                if (badge > 0)
+                  Container(
+                    margin: const EdgeInsets.only(right: 6),
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: AppTheme.emerald600,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 20,
+                  color: active ? AppTheme.forest : AppTheme.muted,
+                ),
+              ],
+            ),
           ),
         ),
-        trailing: badge > 0
-            ? Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: AppTheme.emerald600,
-                  shape: BoxShape.circle,
-                ),
-              )
-            : null,
-        onTap: () {
-          final router = GoRouter.of(context);
-          router.go(path);
-          if (!permanent && Navigator.of(context).canPop()) {
-            Navigator.of(context).pop();
-          }
-        },
       ),
     );
   }
+}
+
+class _DrawerHeader extends StatelessWidget {
+  const _DrawerHeader({
+    required this.familyName,
+    required this.userName,
+  });
+
+  final String familyName;
+  final String userName;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      decoration: BoxDecoration(
+        image: const DecorationImage(
+          image: AssetImage('assets/images/drawer_header_bg.jpg'),
+          fit: BoxFit.cover,
+          opacity: 0.55,
+        ),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0xFFE8F5E9).withValues(alpha: 0.95),
+            const Color(0xFFC8E6C9).withValues(alpha: 0.9),
+            const Color(0xFFA5D6A7).withValues(alpha: 0.85),
+          ],
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: const FtBrandMark(size: 46),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      familyName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTheme.display(
+                        size: 20,
+                        color: AppTheme.forestDark,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            userName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTheme.body(
+                              size: 13,
+                              weight: FontWeight.w700,
+                              color: AppTheme.inkSoft,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.verified_rounded,
+                          size: 16,
+                          color: AppTheme.forest,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Our Family… Our Tree… ❤️',
+            style: AppTheme.body(
+              size: 13,
+              color: AppTheme.forestDark,
+              weight: FontWeight.w600,
+            ).copyWith(fontStyle: FontStyle.italic),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InviteBanner extends StatelessWidget {
+  const _InviteBanner({required this.onInvite});
+
+  final VoidCallback onInvite;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8F5E9),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFC8E6C9)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(Icons.account_tree_rounded, color: AppTheme.forest),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Keep Your Family Connected',
+                  style: AppTheme.body(
+                    size: 12,
+                    weight: FontWeight.w800,
+                    color: AppTheme.forestDark,
+                  ),
+                ),
+                Text(
+                  'Grow Together, Always…',
+                  style: AppTheme.body(
+                    size: 11,
+                    color: AppTheme.muted,
+                  ).copyWith(fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          FilledButton.icon(
+            onPressed: onInvite,
+            style: FilledButton.styleFrom(
+              backgroundColor: AppTheme.forest,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(0, 36),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            icon: const Icon(Icons.person_add_alt_1_rounded, size: 16),
+            label: const Text('Invite', style: TextStyle(fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HillPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = AppTheme.forest
+      ..style = PaintingStyle.fill;
+    final path = Path()
+      ..moveTo(0, size.height)
+      ..lineTo(0, size.height * 0.55)
+      ..quadraticBezierTo(
+        size.width * 0.25,
+        size.height * 0.05,
+        size.width * 0.5,
+        size.height * 0.45,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.75,
+        size.height * 0.85,
+        size.width,
+        size.height * 0.35,
+      )
+      ..lineTo(size.width, size.height)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

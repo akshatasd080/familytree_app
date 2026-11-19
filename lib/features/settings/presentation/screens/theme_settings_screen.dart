@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../app/theme.dart';
-import '../../../../core/widgets/ft_page.dart';
+import '../../../../core/widgets/ft_branded_page.dart';
 import '../providers/theme_settings_provider.dart';
 
 class ThemeSettingsScreen extends StatelessWidget {
@@ -13,8 +13,9 @@ class ThemeSettingsScreen extends StatelessWidget {
     final theme = context.watch<ThemeSettingsProvider>();
     final accent = theme.accent;
 
-    return FtPage(
-      title: 'Theme Settings',
+    return FtBrandedPage(
+      title: 'Settings',
+      subtitle: 'Look & feel of your family app',
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [

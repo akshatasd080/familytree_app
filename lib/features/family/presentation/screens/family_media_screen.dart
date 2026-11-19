@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 import '../../../../app/router.dart';
 import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
-import '../../../../core/widgets/ft_page.dart';
+import '../../../../core/widgets/ft_branded_page.dart';
 import '../../../../core/widgets/responsive.dart';
 import '../../data/family_api_service.dart';
 import '../../data/models/family_models.dart';
@@ -874,21 +874,23 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
   @override
   Widget build(BuildContext context) {
     final familyId = context.watch<FamilySessionProvider>().familyId;
-    return FtPage(
+    return FtBrandedPage(
       title: 'Family Feed',
+      subtitle: 'Moments that keep us close ❤️',
       actions: [
         IconButton(
           tooltip: 'Chat',
           onPressed: () => context.openShell('/family/chat'),
-          icon: const Icon(Icons.chat_bubble_outline_rounded),
+          icon: Icon(Icons.chat_bubble_outline_rounded, color: AppTheme.ink),
         ),
         IconButton(
           tooltip: 'Refresh',
           onPressed: _load,
-          icon: const Icon(Icons.refresh_rounded),
+          icon: Icon(Icons.refresh_rounded, color: AppTheme.ink),
         ),
       ],
       floatingActionButton: FloatingActionButton(
+        heroTag: 'feed-compose-fab',
         onPressed: _compose,
         backgroundColor: AppTheme.forest,
         foregroundColor: Colors.white,

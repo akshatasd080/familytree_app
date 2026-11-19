@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import '../../../../app/router.dart';
 import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
-import '../../../../core/widgets/ft_page.dart';
+import '../../../../core/widgets/ft_branded_page.dart';
 import '../../../../core/widgets/responsive.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../data/family_api_service.dart';
@@ -143,12 +143,16 @@ class _FamilyAdminScreenState extends State<FamilyAdminScreen> {
   @override
   Widget build(BuildContext context) {
     final url = mediaUrl(_avatar);
-    return FtPage(
+    return FtBrandedPage(
       title: 'Family Admin',
+      subtitle: 'Settings for your family space',
       actions: [
         TextButton(
           onPressed: _loading ? null : _load,
-          child: const Text('Reset'),
+          child: Text(
+            'Reset',
+            style: AppTheme.body(weight: FontWeight.w700, color: AppTheme.muted),
+          ),
         ),
         TextButton(
           onPressed: _saving ? null : _save,
