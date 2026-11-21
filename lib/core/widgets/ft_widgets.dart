@@ -2,6 +2,41 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
 
+/// Web-style unread count pill (`#FF5C8A`, 99+).
+class FtCountBadge extends StatelessWidget {
+  const FtCountBadge({super.key, required this.count, this.compact = false});
+
+  final int count;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    if (count <= 0) return const SizedBox.shrink();
+    final label = count > 99 ? '99+' : '$count';
+    return Container(
+      constraints: BoxConstraints(
+        minWidth: compact ? 16 : 18,
+        minHeight: compact ? 16 : 18,
+      ),
+      padding: EdgeInsets.symmetric(horizontal: compact ? 4 : 5),
+      decoration: const BoxDecoration(
+        color: Color(0xFFFF5C8A),
+        borderRadius: BorderRadius.all(Radius.circular(999)),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        label,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: compact ? 9 : 10,
+          fontWeight: FontWeight.w800,
+          height: 1.1,
+        ),
+      ),
+    );
+  }
+}
+
 class FtBrandMark extends StatelessWidget {
   const FtBrandMark({super.key, this.size = 40});
 

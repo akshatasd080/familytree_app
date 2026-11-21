@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
 import '../../data/family_api_service.dart';
+import '../providers/family_providers.dart';
 
 /// 1:1 family chat — conversation list + message thread (web FamilyTree / Media parity).
 class FamilyChatPanel extends StatefulWidget {
@@ -94,6 +95,11 @@ class FamilyChatPanelState extends State<FamilyChatPanel> {
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
+      if (mounted) {
+        context.read<FamilyChatUnreadProvider>().refresh(
+              families: context.read<FamilySessionProvider>().families,
+            );
+      }
     } catch (_) {
       _conversations = const [];
     } finally {

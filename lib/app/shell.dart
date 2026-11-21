@@ -28,10 +28,13 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      context.read<FamilySessionProvider>().loadMine();
+      final session = context.read<FamilySessionProvider>();
+      await session.loadMine();
+      if (!mounted) return;
       context.read<FamilyNoticesUnreadProvider>().refresh();
+      context.read<FamilyChatUnreadProvider>().refresh(families: session.families);
       final auth = context.read<AuthProvider>();
       if (auth.user?.mustChangePassword == true) {
         showDialog(
@@ -41,10 +44,12 @@ class _AppShellState extends State<AppShell> {
         );
       }
       _unreadTimer = Timer.periodic(
-        const Duration(seconds: 30),
+        const Duration(seconds: 20),
         (_) {
           if (!mounted) return;
+          final families = context.read<FamilySessionProvider>().families;
           context.read<FamilyNoticesUnreadProvider>().refresh();
+          context.read<FamilyChatUnreadProvider>().refresh(families: families);
         },
       );
     });
@@ -61,6 +66,7 @@ class _AppShellState extends State<AppShell> {
     final auth = context.watch<AuthProvider>();
     final family = context.watch<FamilySessionProvider>();
     final noticesUnread = context.watch<FamilyNoticesUnreadProvider>();
+    final chatUnread = context.watch<FamilyChatUnreadProvider>();
     final themeSettings = context.watch<ThemeSettingsProvider>();
     final wide = MediaQuery.sizeOf(context).width >= 840;
     final mustChange = auth.user?.mustChangePassword == true;
@@ -92,6 +98,7 @@ class _AppShellState extends State<AppShell> {
                 userName: auth.user?.name ?? '',
                 showAdminFamilies: auth.hasPermission('family.read'),
                 messagesUnread: noticesUnread.unreadCount,
+                chatUnread: chatUnread.unreadCount,
                 onLogout: () async {
                   await auth.logout();
                   if (context.mounted) context.go('/login');
@@ -110,6 +117,7 @@ class _AppShellState extends State<AppShell> {
                     userName: auth.user?.name ?? '',
                     showAdminFamilies: auth.hasPermission('family.read'),
                     messagesUnread: noticesUnread.unreadCount,
+                    chatUnread: chatUnread.unreadCount,
                     permanent: true,
                     onLogout: () async {
                       await auth.logout();
@@ -145,6 +153,7 @@ class _AppDrawer extends StatelessWidget {
     required this.showAdminFamilies,
     required this.onLogout,
     this.messagesUnread = 0,
+    this.chatUnread = 0,
     this.permanent = false,
   });
 
@@ -153,6 +162,7 @@ class _AppDrawer extends StatelessWidget {
   final bool showAdminFamilies;
   final VoidCallback onLogout;
   final int messagesUnread;
+  final int chatUnread;
   final bool permanent;
 
   void _go(BuildContext context, String path) {
@@ -215,6 +225,7 @@ class _AppDrawer extends StatelessWidget {
                 Icons.chat_bubble_rounded,
                 'Chat',
                 '/family/chat',
+                badge: chatUnread,
               ),
               _item(
                 context,
@@ -386,16 +397,10 @@ class _AppDrawer extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (badge > 0)
-                  Container(
-                    margin: const EdgeInsets.only(right: 6),
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: AppTheme.emerald600,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
+                if (badge > 0) ...[
+                  FtCountBadge(count: badge),
+                  const SizedBox(width: 6),
+                ],
                 Icon(
                   Icons.chevron_right_rounded,
                   size: 20,

@@ -108,6 +108,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .whereType<Map>()
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
+
+      if (mounted) {
+        context.read<FamilyNoticesUnreadProvider>().refresh();
+        context
+            .read<FamilyChatUnreadProvider>()
+            .refresh(families: session.families);
+      }
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -252,7 +259,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int get _unreadNotices =>
       context.watch<FamilyNoticesUnreadProvider>().unreadCount;
 
-  int get _unreadActivity {
+  int get _unreadChats =>
+      context.watch<FamilyChatUnreadProvider>().unreadCount;
+
+  int get _headerMessageCount {
     var n = 0;
     for (final item in _notifications) {
       final read = item['is_read'] == true || item['isRead'] == true;
@@ -354,17 +364,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               color: AppTheme.ink,
                             ),
                           ),
-                          if (_unreadActivity > 0)
+                          if (_headerMessageCount > 0)
                             Positioned(
-                              right: 10,
-                              top: 10,
-                              child: Container(
-                                width: 8,
-                                height: 8,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFE11D48),
-                                  shape: BoxShape.circle,
-                                ),
+                              right: 6,
+                              top: 6,
+                              child: FtCountBadge(
+                                count: _headerMessageCount,
+                                compact: true,
                               ),
                             ),
                         ],
@@ -435,6 +441,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               onMap: () => context.openShell('/family/map'),
                               onProfile: () =>
                                   context.openShell('/family/profile'),
+                              chatBadge: _unreadChats,
                             ),
                             const SizedBox(height: 16),
                             _FamilyOverviewCard(overview: _familyOverview()),
@@ -546,14 +553,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Positioned(
             right: 18,
             bottom: 18 + MediaQuery.paddingOf(context).bottom,
-            child: FloatingActionButton(
-              heroTag: 'dashboard-chat-fab',
-              tooltip: 'Chat',
-              onPressed: () => context.openShell('/family/chat'),
-              backgroundColor: AppTheme.forest,
-              foregroundColor: Colors.white,
-              elevation: 6,
-              child: const Icon(Icons.chat_bubble_rounded),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                FloatingActionButton(
+                  heroTag: 'dashboard-chat-fab',
+                  tooltip: 'Chat',
+                  onPressed: () => context.openShell('/family/chat'),
+                  backgroundColor: AppTheme.forest,
+                  foregroundColor: Colors.white,
+                  elevation: 6,
+                  child: const Icon(Icons.chat_bubble_rounded),
+                ),
+                if (_unreadChats > 0)
+                  Positioned(
+                    right: -2,
+                    top: -2,
+                    child: FtCountBadge(count: _unreadChats, compact: true),
+                  ),
+              ],
             ),
           ),
         ],
@@ -727,6 +745,7 @@ class _QuickActionsGrid extends StatelessWidget {
     required this.onEvents,
     required this.onMap,
     required this.onProfile,
+    this.chatBadge = 0,
   });
 
   final VoidCallback onTree;
@@ -735,16 +754,18 @@ class _QuickActionsGrid extends StatelessWidget {
   final VoidCallback onEvents;
   final VoidCallback onMap;
   final VoidCallback onProfile;
+  final int chatBadge;
 
   @override
   Widget build(BuildContext context) {
-    final items = <(IconData, String, Color, Color, VoidCallback)>[
+    final items = <(IconData, String, Color, Color, VoidCallback, int)>[
       (
         Icons.account_tree_rounded,
         'Tree',
         const Color(0xFFE8F5E9),
         const Color(0xFF2E7D32),
         onTree,
+        0,
       ),
       (
         Icons.auto_awesome_mosaic_rounded,
@@ -752,6 +773,7 @@ class _QuickActionsGrid extends StatelessWidget {
         const Color(0xFFE3F2FD),
         const Color(0xFF1565C0),
         onFeed,
+        0,
       ),
       (
         Icons.chat_bubble_rounded,
@@ -759,6 +781,7 @@ class _QuickActionsGrid extends StatelessWidget {
         const Color(0xFFFCE4EC),
         const Color(0xFFC2185B),
         onChat,
+        chatBadge,
       ),
       (
         Icons.event_rounded,
@@ -766,6 +789,7 @@ class _QuickActionsGrid extends StatelessWidget {
         const Color(0xFFFFF3E0),
         const Color(0xFFEF6C00),
         onEvents,
+        0,
       ),
       (
         Icons.map_rounded,
@@ -773,6 +797,7 @@ class _QuickActionsGrid extends StatelessWidget {
         const Color(0xFFF3E5F5),
         const Color(0xFF7B1FA2),
         onMap,
+        0,
       ),
       (
         Icons.person_rounded,
@@ -780,6 +805,7 @@ class _QuickActionsGrid extends StatelessWidget {
         const Color(0xFFE0F2F1),
         const Color(0xFF00796B),
         onProfile,
+        0,
       ),
     ];
 
@@ -800,6 +826,7 @@ class _QuickActionsGrid extends StatelessWidget {
                   soft: item.$3,
                   accent: item.$4,
                   onTap: item.$5,
+                  badge: item.$6,
                 ),
               ),
           ],
@@ -816,6 +843,7 @@ class _QuickActionTile extends StatelessWidget {
     required this.soft,
     required this.accent,
     required this.onTap,
+    this.badge = 0,
   });
 
   final IconData icon;
@@ -823,6 +851,7 @@ class _QuickActionTile extends StatelessWidget {
   final Color soft;
   final Color accent;
   final VoidCallback onTap;
+  final int badge;
 
   @override
   Widget build(BuildContext context) {
@@ -863,6 +892,10 @@ class _QuickActionTile extends StatelessWidget {
                   style: AppTheme.body(weight: FontWeight.w800, size: 14),
                 ),
               ),
+              if (badge > 0) ...[
+                FtCountBadge(count: badge),
+                const SizedBox(width: 4),
+              ],
               Icon(Icons.chevron_right_rounded, color: AppTheme.muted),
             ],
           ),

@@ -24,6 +24,7 @@ class _FamilyTreeAppState extends State<FamilyTreeApp> {
   late final FamilyApiService _familyApi;
   late final FamilySessionProvider _familySession;
   late final FamilyNoticesUnreadProvider _noticesUnread;
+  late final FamilyChatUnreadProvider _chatUnread;
   late final ThemeSettingsProvider _theme;
   late final GoRouter _router;
 
@@ -39,6 +40,7 @@ class _FamilyTreeAppState extends State<FamilyTreeApp> {
     _familyApi = FamilyApiService(_api);
     _familySession = FamilySessionProvider(_familyApi);
     _noticesUnread = FamilyNoticesUnreadProvider(_familyApi);
+    _chatUnread = FamilyChatUnreadProvider(_familyApi);
     _theme = ThemeSettingsProvider();
     _router = createRouter(_auth);
     _auth.restoreSession();
@@ -53,6 +55,7 @@ class _FamilyTreeAppState extends State<FamilyTreeApp> {
         ChangeNotifierProvider.value(value: _auth),
         ChangeNotifierProvider.value(value: _familySession),
         ChangeNotifierProvider.value(value: _noticesUnread),
+        ChangeNotifierProvider.value(value: _chatUnread),
         ChangeNotifierProvider.value(value: _theme),
       ],
       child: Consumer<ThemeSettingsProvider>(
