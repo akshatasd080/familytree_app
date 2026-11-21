@@ -11,6 +11,10 @@ import '../../domain/profile_privacy.dart';
 import 'member_preview_sheet.dart';
 
 /// Web-parity profile panel opened from the Family Tree.
+///
+/// Use [fullScreen] when opening above an Android WebView (Root tree): a
+/// translucent modal over a PlatformView leaves a black/stuck surface after
+/// back. A full-screen opaque route avoids that.
 Future<void> showTreeMemberProfileSheet({
   required BuildContext context,
   required FamilyMember member,
@@ -26,27 +30,57 @@ Future<void> showTreeMemberProfileSheet({
   Future<void> Function(FamilyMember member)? onMakeAdmin,
   ValueChanged<FamilyMember>? onOpenKin,
   String? treeRole,
+  bool fullScreen = false,
 }) {
+  Widget buildSheet(BuildContext ctx) => _TreeMemberProfileSheet(
+        member: member,
+        familyId: familyId,
+        members: members,
+        relationships: relationships,
+        focusUserId: focusUserId,
+        meUserId: meUserId,
+        isAdmin: isAdmin,
+        onChanged: onChanged,
+        onShowTheirTree: onShowTheirTree,
+        onChat: onChat,
+        onMakeAdmin: onMakeAdmin,
+        onOpenKin: onOpenKin,
+        treeRole: treeRole,
+        fullScreen: fullScreen,
+      );
+
+  if (fullScreen) {
+    return Navigator.of(context, rootNavigator: true).push<void>(
+      PageRouteBuilder<void>(
+        opaque: true,
+        fullscreenDialog: true,
+        barrierDismissible: false,
+        pageBuilder: (ctx, animation, secondaryAnimation) => Scaffold(
+          backgroundColor: const Color(0xFFF6F4EF),
+          body: SafeArea(child: buildSheet(ctx)),
+        ),
+        transitionsBuilder: (ctx, animation, secondaryAnimation, child) {
+          return SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, 1),
+              end: Offset.zero,
+            ).animate(
+              CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+            ),
+            child: child,
+          );
+        },
+      ),
+    );
+  }
+
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
+    useRootNavigator: true,
     backgroundColor: Colors.transparent,
-    builder: (ctx) => _TreeMemberProfileSheet(
-      member: member,
-      familyId: familyId,
-      members: members,
-      relationships: relationships,
-      focusUserId: focusUserId,
-      meUserId: meUserId,
-      isAdmin: isAdmin,
-      onChanged: onChanged,
-      onShowTheirTree: onShowTheirTree,
-      onChat: onChat,
-      onMakeAdmin: onMakeAdmin,
-      onOpenKin: onOpenKin,
-      treeRole: treeRole,
-    ),
+    builder: buildSheet,
   );
 }
 
@@ -65,6 +99,7 @@ class _TreeMemberProfileSheet extends StatefulWidget {
     this.onMakeAdmin,
     this.onOpenKin,
     this.treeRole,
+    this.fullScreen = false,
   });
 
   final FamilyMember member;
@@ -80,6 +115,7 @@ class _TreeMemberProfileSheet extends StatefulWidget {
   final Future<void> Function(FamilyMember member)? onMakeAdmin;
   final ValueChanged<FamilyMember>? onOpenKin;
   final String? treeRole;
+  final bool fullScreen;
 
   @override
   State<_TreeMemberProfileSheet> createState() =>
@@ -318,28 +354,22 @@ class _TreeMemberProfileSheetState extends State<_TreeMemberProfileSheet> {
             emptyLabel: 'Date of birth not added',
           );
 
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: 560,
-            maxHeight: MediaQuery.sizeOf(context).height * 0.92,
-          ),
-          child: Material(
-            color: Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
-            clipBehavior: Clip.antiAlias,
-            child: Column(
+    final sheetBody = Column(
               children: [
                 Container(
                   color: const Color(0xFFF6F4EF),
                   padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
                   child: Row(
                     children: [
-                      const Icon(Icons.drag_handle, size: 18, color: Color(0xFF94A3B8)),
-                      const SizedBox(width: 6),
+                      if (!widget.fullScreen)
+                        const Icon(Icons.drag_handle, size: 18, color: Color(0xFF94A3B8)),
+                      if (!widget.fullScreen) const SizedBox(width: 6),
+                      if (widget.fullScreen)
+                        IconButton(
+                          tooltip: 'Back',
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.arrow_back, size: 20),
+                        ),
                       Expanded(
                         child: Text(
                           'Profile',
@@ -694,7 +724,29 @@ class _TreeMemberProfileSheetState extends State<_TreeMemberProfileSheet> {
                   ),
                 ),
               ],
-            ),
+    );
+
+    if (widget.fullScreen) {
+      return Material(
+        color: Colors.white,
+        child: sheetBody,
+      );
+    }
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 560,
+            maxHeight: MediaQuery.sizeOf(context).height * 0.92,
+          ),
+          child: Material(
+            color: Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
+            clipBehavior: Clip.antiAlias,
+            child: sheetBody,
           ),
         ),
       ),

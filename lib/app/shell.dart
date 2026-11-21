@@ -78,6 +78,13 @@ class _AppShellState extends State<AppShell> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
+        // Prefer dismissing root-navigator sheets/dialogs (e.g. profile)
+        // before shell tab navigation — avoids black stuck screens.
+        final rootNav = Navigator.of(context, rootNavigator: true);
+        if (rootNav.canPop()) {
+          rootNav.pop();
+          return;
+        }
         final router = GoRouter.of(context);
         if (router.canPop()) {
           router.pop();

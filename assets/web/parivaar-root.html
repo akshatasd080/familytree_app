@@ -21,7 +21,8 @@
   --body:'Inter','Noto Sans Devanagari',system-ui,-apple-system,'Segoe UI',sans-serif;
   color-scheme:dark;
 }
-body.embed #listBtn,body.embed #empty,body.embed #person,body.embed #editorWrap{display:none!important}
+body.embed #listBtn,body.embed #empty,body.embed #person,body.embed #editorWrap,
+body.embed #zoomOutBtn,body.embed #zoomInBtn,body.embed #resetBtn,body.embed #fsBtn{display:none!important}
 html{height:100%;box-sizing:border-box}
 body{
   margin:0;height:100%;box-sizing:border-box;position:relative;overflow:hidden;
@@ -175,6 +176,8 @@ textarea{width:100%;box-sizing:border-box;min-height:230px;max-height:46vh;resiz
       </div>
       <div class="tools">
         <button class="ibtn" id="listBtn" type="button" title="Edit full list" aria-label="Edit full list"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>
+        <button class="ibtn" id="zoomOutBtn" type="button" title="Zoom out" aria-label="Zoom out"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M8 11h6"/><path d="M21 21l-4.3-4.3"/></svg></button>
+        <button class="ibtn" id="zoomInBtn" type="button" title="Zoom in" aria-label="Zoom in"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6"/><path d="M21 21l-4.3-4.3"/></svg></button>
         <button class="ibtn" id="resetBtn" type="button" title="Reset view" aria-label="Reset view"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg></button>
         <button class="ibtn" id="fsBtn" type="button" title="Fullscreen" aria-label="Fullscreen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
       </div>
@@ -978,6 +981,11 @@ range.addEventListener('input',()=>{
 const endScrub=()=>{scrubbing=false;};
 range.addEventListener('pointerup',endScrub); range.addEventListener('change',endScrub); range.addEventListener('blur',endScrub);
 
+function setUserZoom(z){userZoom=Math.max(0.4,Math.min(2.4,z));idleT=0;}
+/* Camera distance = dist * userZoom → larger zoom value = farther = zoom OUT.
+   After a profile/person select, clear focus on zoom-out so framing can pull back. */
+$('zoomOutBtn').addEventListener('click',()=>{if(selP)select(null);setUserZoom(userZoom*1.25);});
+$('zoomInBtn').addEventListener('click',()=>{setUserZoom(userZoom/1.25);});
 $('resetBtn').addEventListener('click',()=>{baseAz=0;baseEl=0.08;userZoom=1;idleT=10;select(null);});
 if(document.fullscreenEnabled){
   $('fsBtn').addEventListener('click',()=>{
@@ -1051,7 +1059,22 @@ function select(p){
 }
 window.addEventListener('message',function(ev){
   const d=ev&&ev.data; if(!d) return;
-  if(d.type==='parivaar-clear') clearTreeFocus();
+  if(d.type==='parivaar-clear'){ clearTreeFocus(); return; }
+  if(d.type==='parivaar-zoom-by'){
+    const f=Number(d.factor);
+    if(Number.isFinite(f)&&f>0){
+      if(f>1&&selP) select(null);
+      setUserZoom(userZoom*f);
+    }
+    return;
+  }
+  if(d.type==='parivaar-zoom'){
+    const z=Number(d.zoom);
+    if(Number.isFinite(z)){
+      if(z>=1&&selP) select(null);
+      setUserZoom(z);
+    }
+  }
 });
 function countSub(n){let c=n.spouse?2:1; n.children.forEach(k=>{c+=countSub(k);}); return c;}
 function renderPanel(){

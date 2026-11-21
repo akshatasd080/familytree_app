@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 import '../../../../app/theme.dart';
 import '../../data/models/family_models.dart';
@@ -27,14 +30,15 @@ class RootTreeView extends StatefulWidget {
   final String familyName;
 
   @override
-  State<RootTreeView> createState() => _RootTreeViewState();
+  State<RootTreeView> createState() => RootTreeViewState();
 }
 
-class _RootTreeViewState extends State<RootTreeView> {
+class RootTreeViewState extends State<RootTreeView> {
   WebViewController? _controller;
   bool _ready = false;
   bool _pageLoaded = false;
   bool _loadingHtml = true;
+  bool _openingProfile = false;
   String? _loadError;
   String? _focusName;
 
@@ -49,6 +53,12 @@ class _RootTreeViewState extends State<RootTreeView> {
   }
 
   @override
+  void dispose() {
+    _controller = null;
+    super.dispose();
+  }
+
+  @override
   void didUpdateWidget(covariant RootTreeView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.members != widget.members ||
@@ -56,6 +66,26 @@ class _RootTreeViewState extends State<RootTreeView> {
       _rebuildForest();
       if (_ready) _pushForest();
     }
+  }
+
+  bool get _isAndroid => !kIsWeb && Platform.isAndroid;
+
+  Widget _buildWebView() {
+    final controller = _controller;
+    if (controller == null) {
+      return const SizedBox.shrink();
+    }
+    // Hybrid composition avoids Texture-layer black surfaces when the
+    // Root tree is remounted after a profile route on Android.
+    if (_isAndroid && controller.platform is AndroidWebViewController) {
+      return WebViewWidget.fromPlatformCreationParams(
+        params: AndroidWebViewWidgetCreationParams(
+          controller: controller.platform as AndroidWebViewController,
+          displayWithHybridComposition: true,
+        ),
+      );
+    }
+    return WebViewWidget(controller: controller);
   }
 
   void _rebuildForest() {
@@ -85,11 +115,12 @@ class _RootTreeViewState extends State<RootTreeView> {
         ..setNavigationDelegate(
           NavigationDelegate(
             onPageFinished: (_) async {
-              _pageLoaded = true;
-              // HTML already posts parivaar-ready; also push after a beat.
               await Future<void>.delayed(const Duration(milliseconds: 160));
               if (!mounted) return;
-              _ready = true;
+              setState(() {
+                _pageLoaded = true;
+                _ready = true;
+              });
               await _pushForest();
             },
           ),
@@ -121,7 +152,15 @@ class _RootTreeViewState extends State<RootTreeView> {
       if (data is! Map) return;
       final type = data['type']?.toString();
       if (type == 'parivaar-ready') {
-        _ready = true;
+        if (mounted) {
+          setState(() {
+            _ready = true;
+            _pageLoaded = true;
+          });
+        } else {
+          _ready = true;
+          _pageLoaded = true;
+        }
         _pushForest();
         return;
       }
@@ -131,7 +170,7 @@ class _RootTreeViewState extends State<RootTreeView> {
       }
       if (type == 'parivaar-select') {
         final id = data['memberId']?.toString() ?? '';
-        if (id.isEmpty) return;
+        if (id.isEmpty || _openingProfile) return;
         FamilyMember? member;
         for (final m in widget.members) {
           if (m.id == id) {
@@ -140,10 +179,13 @@ class _RootTreeViewState extends State<RootTreeView> {
           }
         }
         if (member == null) return;
-        if (mounted) {
-          setState(() => _focusName = member!.name);
-        }
+        if (mounted) setState(() => _focusName = member!.name);
+        _openingProfile = true;
+        // Host must unmount this WebView while profile is open.
         widget.onSelect?.call(member);
+        Future<void>.delayed(const Duration(milliseconds: 800), () {
+          _openingProfile = false;
+        });
       }
     } catch (_) {
       // Ignore malformed bridge payloads.
@@ -154,7 +196,6 @@ class _RootTreeViewState extends State<RootTreeView> {
     final c = _controller;
     if (c == null || (!_ready && !_pageLoaded)) return;
     final rootsJson = jsonEncode(_forest.map((e) => e.toJson()).toList());
-    // Same channel the HTML embed listener expects.
     final js = '''
 (function(){
   try {
@@ -176,6 +217,43 @@ class _RootTreeViewState extends State<RootTreeView> {
       );
     } catch (_) {}
     if (mounted) setState(() => _focusName = null);
+  }
+
+  Future<void> _zoomBy(double factor) async {
+    final c = _controller;
+    if (c == null || !_pageLoaded) return;
+    // Zoom-out after profile select: clear person focus so the camera can
+    // actually pull back (selP locks framing on the face).
+    final clearFocus = factor > 1.0;
+    try {
+      await c.runJavaScript('''
+(function(){
+  var f=$factor;
+  if($clearFocus && typeof select==='function'){ try{select(null);}catch(e){} }
+  window.postMessage({ type: 'parivaar-zoom-by', factor: f }, '*');
+})();
+''');
+    } catch (_) {}
+    if (clearFocus && mounted && _focusName != null) {
+      setState(() => _focusName = null);
+    }
+  }
+
+  Future<void> _resetView() async {
+    final c = _controller;
+    if (c == null || !_pageLoaded) return;
+    try {
+      await c.runJavaScript('''
+(function(){
+  try{ if(typeof select==='function') select(null); }catch(e){}
+  try{ baseAz=0; baseEl=0.08; userZoom=1; idleT=10; }catch(e){}
+  window.postMessage({ type: 'parivaar-zoom', zoom: 1 }, '*');
+})();
+''');
+    } catch (_) {}
+    if (mounted && _focusName != null) {
+      setState(() => _focusName = null);
+    }
   }
 
   @override
@@ -221,89 +299,142 @@ class _RootTreeViewState extends State<RootTreeView> {
       );
     }
 
+    final showLoader = _loadingHtml || _controller == null || !_pageLoaded;
+
     return ColoredBox(
       color: const Color(0xFF060B12),
       child: Stack(
         fit: StackFit.expand,
         children: [
-          if (_controller != null)
-            WebViewWidget(controller: _controller!)
-          else if (_loadingHtml)
-            const Center(
-              child: CircularProgressIndicator(color: Color(0xFFE9B95F)),
+          if (_controller != null) _buildWebView(),
+          if (showLoader)
+            const ColoredBox(
+              color: Color(0xFF060B12),
+              child: Center(
+                child: CircularProgressIndicator(color: Color(0xFFE9B95F)),
+              ),
             ),
+          // Keep overlays left-only and intrinsic width so they never steal
+          // taps from the HTML zoom tools (top-right) — especially after a
+          // profile select when the "Focused" chip used to go full-width.
           Positioned(
             left: 12,
             top: 12,
-            right: 12,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white12),
-                  ),
-                  child: Text(
-                    '$_people people · living root tree · tap person for profile',
-                    style: const TextStyle(
-                      color: Color(0xFFE2E8F0),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.sizeOf(context).width * 0.52,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: Text(
+                      '$_people people · tap person for profile',
+                      style: const TextStyle(
+                        color: Color(0xFFE2E8F0),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-                if (_focusName != null) ...[
-                  const SizedBox(height: 8),
-                  Material(
-                    color: Colors.black.withValues(alpha: 0.55),
-                    borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      onTap: _clearFocus,
+                  if (_focusName != null) ...[
+                    const SizedBox(height: 8),
+                    Material(
+                      color: Colors.black.withValues(alpha: 0.55),
                       borderRadius: BorderRadius.circular(12),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                'Focused · $_focusName',
-                                style: const TextStyle(
-                                  color: Color(0xFFFDE68A),
+                      child: InkWell(
+                        onTap: _clearFocus,
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth:
+                                      MediaQuery.sizeOf(context).width * 0.38,
+                                ),
+                                child: Text(
+                                  'Focused · $_focusName',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Color(0xFFFDE68A),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              const Icon(
+                                Icons.close,
+                                size: 14,
+                                color: Colors.white70,
+                              ),
+                              const SizedBox(width: 2),
+                              const Text(
+                                'Clear',
+                                style: TextStyle(
+                                  color: Colors.white,
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            const Icon(
-                              Icons.close,
-                              size: 14,
-                              color: Colors.white70,
-                            ),
-                            const SizedBox(width: 2),
-                            const Text(
-                              'Clear',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          // Native Flutter zoom — reliable taps above the WebView PlatformView.
+          Positioned(
+            right: 10,
+            top: 12,
+            child: Material(
+              color: const Color(0xE6080F18),
+              elevation: 3,
+              borderRadius: BorderRadius.circular(14),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Zoom out',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => _zoomBy(1.25),
+                    icon: const Icon(Icons.zoom_out, size: 20, color: Colors.white),
+                  ),
+                  IconButton(
+                    tooltip: 'Zoom in',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => _zoomBy(1 / 1.25),
+                    icon: const Icon(Icons.zoom_in, size: 20, color: Colors.white),
+                  ),
+                  IconButton(
+                    tooltip: 'Reset view',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: _resetView,
+                    icon: const Icon(Icons.filter_center_focus, size: 18, color: Colors.white),
                   ),
                 ],
-              ],
+              ),
             ),
           ),
         ],

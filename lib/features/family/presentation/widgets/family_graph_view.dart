@@ -61,6 +61,9 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
   Size _content = Size.zero;
   String? _fitSignature;
   bool _fitScheduled = false;
+  /// Once the user taps +/- zoom, don't auto-fit on parent rebuilds.
+  bool _userAdjustedZoom = false;
+  String? _dataSignature;
 
   @override
   void initState() {
@@ -71,15 +74,25 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
       _tx = TransformationController();
       _ownsTx = true;
     }
+    _dataSignature = _computeDataSignature();
+  }
+
+  String _computeDataSignature() {
+    final ids = widget.members.map((m) => m.id).join(',');
+    final rels = widget.relationships.length;
+    return '$ids|$rels|${widget.focusUserId ?? ''}';
   }
 
   @override
   void didUpdateWidget(covariant FamilyGraphView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.members != widget.members ||
-        oldWidget.relationships != widget.relationships ||
-        oldWidget.focusUserId != widget.focusUserId) {
+    final nextSig = _computeDataSignature();
+    // Compare content, not List identity — parent rebuilds create new lists
+    // every frame and used to force-fit (wiping zoom-out after zoom-in).
+    if (nextSig != _dataSignature) {
+      _dataSignature = nextSig;
       _fitSignature = null;
+      _userAdjustedZoom = false;
       _scheduleFit();
     }
   }
@@ -107,7 +120,8 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
     final dy = _viewport.height / 2 - focalY * scale;
     _tx.value = Matrix4.identity()
       ..translateByDouble(dx, dy, 0, 1)
-      ..scaleByDouble(scale, scale, 1, 1);
+      ..scaleByDouble(scale, scale, scale, 1);
+    _userAdjustedZoom = true;
     setState(() {});
     return true;
   }
@@ -309,10 +323,12 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
   /// Pinch / +/- zoom still available to see the full tree.
   void _fitToViewport({bool force = false}) {
     if (_viewport == Size.zero || _content == Size.zero) return;
+    if (_userAdjustedZoom && !force) return;
     final signature =
         '${widget.members.length}_${_content.width.round()}_${_viewport.width.round()}_${_viewport.height.round()}';
     if (!force && _fitSignature == signature) return;
     _fitSignature = signature;
+    _userAdjustedZoom = false;
 
     final isPhone = _viewport.width < 700;
     final pad = isPhone ? 12.0 : 24.0;
@@ -337,27 +353,38 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
     }
 
     // True center — horizontally and vertically.
+    // Uniform XYZ scale so getMaxScaleOnAxis() matches on-screen zoom.
     final dx = (_viewport.width - _content.width * scale) / 2;
     final dy = (_viewport.height - _content.height * scale) / 2;
 
     _tx.value = Matrix4.identity()
       ..translateByDouble(dx, dy, 0, 1)
-      ..scaleByDouble(scale, scale, 1, 1);
+      ..scaleByDouble(scale, scale, scale, 1);
     if (mounted) setState(() {});
   }
 
   void _setZoom(double next) {
     if (_viewport == Size.zero) return;
-    final clamped = next.clamp(0.35, 2.8).toDouble();
+    final target = next.clamp(0.35, 2.8).toDouble();
     final current = _zoom;
     if (current <= 0) return;
+    if ((target - current).abs() < 0.001) return;
+
+    // Relative scale around viewport centre — keeps pan stable and makes
+    // zoom-out actually move (absolute rebuild with z=1 was lying to _zoom).
+    final factor = target / current;
     final focal = Offset(_viewport.width / 2, _viewport.height / 2);
-    final scene = _tx.toScene(focal);
-    final m = Matrix4.identity()
-      ..translateByDouble(focal.dx, focal.dy, 0, 1)
-      ..scaleByDouble(clamped, clamped, 1, 1)
-      ..translateByDouble(-scene.dx, -scene.dy, 0, 1);
-    _tx.value = m;
+    final before = _tx.toScene(focal);
+
+    final scaled = _tx.value.clone()
+      ..scaleByDouble(factor, factor, factor, 1);
+    _tx.value = scaled;
+
+    final after = _tx.toScene(focal);
+    _tx.value = scaled.clone()
+      ..translateByDouble(before.dx - after.dx, before.dy - after.dy, 0, 1);
+
+    _userAdjustedZoom = true;
     setState(() {});
   }
 
@@ -645,7 +672,10 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
                         color: theme.cardBorder,
                       ),
                       TextButton(
-                        onPressed: () => _fitToViewport(force: true),
+                        onPressed: () {
+                          _userAdjustedZoom = false;
+                          _fitToViewport(force: true);
+                        },
                         child: Text(
                           'Fit',
                           style: AppTheme.body(

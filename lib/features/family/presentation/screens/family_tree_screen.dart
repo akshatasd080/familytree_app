@@ -46,6 +46,9 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   String? _focusOverrideId;
   String? _chatPeerUserId;
   int _chatDockNonce = 0;
+  int _rootNonce = 0;
+  bool _rootSuspended = false;
+  int _rootProfileDepth = 0;
   bool _searchOpen = false;
   String _treeThemeId = defaultTreeThemeId;
 
@@ -334,10 +337,46 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     });
   }
 
-  Future<void> _openMemberProfile(FamilyMember member) async {
+  Future<void> _waitForRootWebViewTeardown() async {
+    await WidgetsBinding.instance.endOfFrame;
+    await WidgetsBinding.instance.endOfFrame;
+    // Android PlatformView dispose is async after the Flutter frame.
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+  }
+
+  Future<void> _openMemberProfile(
+    FamilyMember member, {
+    bool fromKinHandoff = false,
+  }) async {
     final familyId = context.read<FamilySessionProvider>().familyId;
+    final meUserId = context.read<AuthProvider>().user?.id;
     if (familyId == null) return;
-    setState(() => _selected = member);
+    final openedFromRoot = _viewMode == 'root';
+
+    // Fully unmount Root WebView before any route covers it.
+    // Opening a sheet in the same frame as setState still leaves the
+    // PlatformView under the route → black/stuck screen on Android back.
+    if (openedFromRoot) {
+      if (!fromKinHandoff) {
+        _rootProfileDepth++;
+      }
+      if (_rootProfileDepth == 1 || !_rootSuspended) {
+        setState(() {
+          _selected = member;
+          _rootSuspended = true;
+        });
+        await _waitForRootWebViewTeardown();
+        if (!mounted) {
+          _rootProfileDepth = 0;
+          _rootSuspended = false;
+          return;
+        }
+      } else {
+        setState(() => _selected = member);
+      }
+    } else {
+      setState(() => _selected = member);
+    }
 
     String? treeRole;
     try {
@@ -354,37 +393,65 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
       }
     } catch (_) {}
 
-    await showTreeMemberProfileSheet(
-      context: context,
-      member: member,
-      familyId: familyId,
-      members: _tree?.members ?? const [],
-      relationships: _tree?.relationships ?? const [],
-      focusUserId: _focusId,
-      meUserId: context.read<AuthProvider>().user?.id,
-      isAdmin: _isAdmin,
-      onChanged: _load,
-      treeRole: treeRole,
-      onShowTheirTree: member.hasLoginAccount
-          ? () => _showTheirTree(member)
-          : null,
-      onChat: member.hasLoginAccount && member.isAlive
-          ? () {
+    try {
+      await showTreeMemberProfileSheet(
+        context: context,
+        member: member,
+        familyId: familyId,
+        members: _tree?.members ?? const [],
+        relationships: _tree?.relationships ?? const [],
+        focusUserId: _focusId,
+        meUserId: meUserId,
+        isAdmin: _isAdmin,
+        onChanged: _load,
+        treeRole: treeRole,
+        // Opaque full-screen route — never stack a translucent sheet on WebView.
+        fullScreen: openedFromRoot,
+        onShowTheirTree: member.hasLoginAccount
+            ? () => _showTheirTree(member)
+            : null,
+        onChat: member.hasLoginAccount && member.isAlive
+            ? () {
+                setState(() {
+                  _chatPeerUserId = member.userId;
+                  _chatDockNonce++;
+                  _selected = null;
+                });
+              }
+            : null,
+        onMakeAdmin: _isAdmin ? _toggleAdmin : null,
+        onOpenKin: (kin) {
+          // Keep Root suspended across kin hops: pre-reserve depth so this
+          // sheet's finally does not remount WebView before the next opens.
+          if (openedFromRoot) _rootProfileDepth++;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            _openMemberProfile(kin, fromKinHandoff: openedFromRoot);
+          });
+        },
+      );
+    } finally {
+      if (mounted) {
+        if (openedFromRoot) {
+          _rootProfileDepth = (_rootProfileDepth - 1).clamp(0, 1000);
+          // Only remount when the last Root profile route is gone.
+          if (_rootProfileDepth == 0 && _viewMode == 'root') {
+            await Future<void>.delayed(const Duration(milliseconds: 80));
+            if (mounted) {
               setState(() {
-                _chatPeerUserId = member.userId;
-                _chatDockNonce++;
+                _rootSuspended = false;
+                _rootNonce++;
                 _selected = null;
               });
             }
-          : null,
-      onMakeAdmin: _isAdmin ? _toggleAdmin : null,
-      onOpenKin: (kin) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          _openMemberProfile(kin);
-        });
-      },
-    );
+          } else {
+            setState(() => _selected = null);
+          }
+        } else {
+          setState(() => _selected = null);
+        }
+      }
+    }
   }
 
   Future<void> _showTheirTree(FamilyMember member) async {
@@ -792,15 +859,40 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                     ),
                                   )
                                 : _viewMode == 'root'
-                                    ? RootTreeView(
-                                        members: _placedMembers,
-                                        relationships:
-                                            _tree?.relationships ?? const [],
-                                        selectedId: _selected?.id,
-                                        familyName:
-                                            session.current?.name ?? 'Family',
-                                        onSelect: _openMemberProfile,
-                                      )
+                                    ? (_rootSuspended
+                                        ? const ColoredBox(
+                                            color: Color(0xFF060B12),
+                                            child: Center(
+                                              child: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  CircularProgressIndicator(
+                                                    color: Color(0xFFE9B95F),
+                                                    strokeWidth: 2.5,
+                                                  ),
+                                                  SizedBox(height: 12),
+                                                  Text(
+                                                    'Opening profile…',
+                                                    style: TextStyle(
+                                                      color: Color(0xFF94A3B8),
+                                                      fontSize: 13,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          )
+                                        : RootTreeView(
+                                            key: ValueKey('root-$_rootNonce'),
+                                            members: _placedMembers,
+                                            relationships:
+                                                _tree?.relationships ??
+                                                    const [],
+                                            selectedId: _selected?.id,
+                                            familyName: session.current?.name ??
+                                                'Family',
+                                            onSelect: _openMemberProfile,
+                                          ))
                                     : Stack(
                                         children: [
                                           FamilyGraphView(
