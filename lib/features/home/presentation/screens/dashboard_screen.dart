@@ -254,13 +254,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
 
     return Material(
-      color: const Color(0xFFF7F9F2),
+      color: AppTheme.shellBg,
       child: Stack(
         children: [
           Positioned.fill(
             child: IgnorePointer(
               child: Opacity(
-                opacity: 0.16,
+                opacity: AppTheme.isDark ? 0.08 : 0.16,
                 child: Image.asset(
                   'assets/images/tree_canvas_bg.jpg',
                   fit: BoxFit.cover,
@@ -732,9 +732,9 @@ class _QuickActionTile extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppTheme.card,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFE2EDE6)),
+            border: Border.all(color: AppTheme.borderSoft),
             boxShadow: [
               BoxShadow(
                 color: accent.withValues(alpha: 0.08),
@@ -793,9 +793,9 @@ class _FamilyOverviewCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.card,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFD7E5DC)),
+        border: Border.all(color: AppTheme.borderSoft),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF1F2A24).withValues(alpha: 0.04),
@@ -819,7 +819,7 @@ class _FamilyOverviewCard extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
+                  color: AppTheme.softFill,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(

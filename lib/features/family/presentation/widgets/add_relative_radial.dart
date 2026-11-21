@@ -168,11 +168,11 @@ class _MobilePickerSheet extends StatelessWidget {
         ),
         margin: const EdgeInsets.fromLTRB(10, 0, 10, 10),
         decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
+          color: AppTheme.softFill,
           borderRadius: BorderRadius.circular(22),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.22),
+              color: Colors.black.withValues(alpha: AppTheme.isDark ? 0.4 : 0.22),
               blurRadius: 28,
               offset: const Offset(0, 10),
             ),
@@ -194,7 +194,7 @@ class _MobilePickerSheet extends StatelessWidget {
                   TextButton(
                     onPressed: onClose,
                     style: TextButton.styleFrom(
-                      backgroundColor: Colors.white,
+                      backgroundColor: AppTheme.card,
                       foregroundColor: AppTheme.muted,
                       padding: const EdgeInsets.symmetric(
                         horizontal: 14,
@@ -321,7 +321,7 @@ class _DesktopRadial extends StatelessWidget {
               child: TextButton(
                 onPressed: onClose,
                 style: TextButton.styleFrom(
-                  backgroundColor: Colors.white,
+                  backgroundColor: AppTheme.card,
                   foregroundColor: AppTheme.muted,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,

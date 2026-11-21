@@ -668,7 +668,7 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
                     ),
                     child: CircleAvatar(
                       radius: 42,
-                      backgroundColor: Colors.white,
+                      backgroundColor: AppTheme.card,
                       child: CircleAvatar(
                         radius: 39,
                         backgroundColor:
@@ -797,7 +797,7 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 16),
             decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
+              color: AppTheme.softFill,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: AppTheme.borderSoft),
             ),
@@ -845,9 +845,9 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
                         imageUrl: src,
                         fit: BoxFit.cover,
                         placeholder: (_, __) =>
-                            Container(color: const Color(0xFFE2E8F0)),
+                            Container(color: AppTheme.softFill),
                         errorWidget: (_, __, ___) => Container(
-                          color: const Color(0xFFE2E8F0),
+                          color: AppTheme.softFill,
                           child: const Icon(Icons.broken_image_outlined),
                         ),
                       )
@@ -931,7 +931,7 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.card,
       showDragHandle: true,
       builder: (ctx) {
         return StatefulBuilder(
@@ -1155,10 +1155,10 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
-            gradient: const LinearGradient(
-              colors: [Color(0xFFECFDF5), Color(0xFFF0FDF4)],
+            gradient: LinearGradient(
+              colors: [AppTheme.unreadFill, AppTheme.softFill],
             ),
-            border: Border.all(color: const Color(0xFFD1FAE5)),
+            border: Border.all(color: AppTheme.borderSoft),
           ),
           child: Row(
             children: [
@@ -1405,7 +1405,7 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
                     margin: const EdgeInsets.only(bottom: 12, top: 4),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
+                      color: AppTheme.softFill,
                       borderRadius: BorderRadius.circular(14),
                       border: Border.all(color: AppTheme.borderSoft),
                     ),
@@ -1616,9 +1616,9 @@ class _PrivacyToggle extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.card,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: AppTheme.borderSoft),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1670,7 +1670,7 @@ class _PrivacyChip extends StatelessWidget {
           style: TextStyle(
             fontSize: 10,
             fontWeight: FontWeight.w800,
-            color: selected ? Colors.white : const Color(0xFF64748B),
+            color: selected ? Colors.white : AppTheme.muted,
           ),
         ),
       ),

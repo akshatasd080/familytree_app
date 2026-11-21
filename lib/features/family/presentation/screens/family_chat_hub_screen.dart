@@ -97,7 +97,7 @@ class _FamilyChatHubScreenState extends State<FamilyChatHubScreen>
     final picked = await showModalBottomSheet<FamilyMember>(
       context: context,
       showDragHandle: true,
-      backgroundColor: const Color(0xFFF7F9F2),
+      backgroundColor: AppTheme.shellBg,
       builder: (ctx) => SafeArea(
         child: ListView(
           shrinkWrap: true,
@@ -154,7 +154,7 @@ class _FamilyChatHubScreenState extends State<FamilyChatHubScreen>
     final wide = MediaQuery.sizeOf(context).width >= 840;
     final canOpenDrawer = !wide && Scaffold.maybeOf(context)?.hasDrawer == true;
     return Material(
-      color: const Color(0xFFF7F9F2),
+      color: AppTheme.shellBg,
       child: Stack(
         children: [
           Positioned.fill(
@@ -229,9 +229,9 @@ class _FamilyChatHubScreenState extends State<FamilyChatHubScreen>
                   child: Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE8EFE9),
+                      color: AppTheme.tabTrack,
                       borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: const Color(0xFFD0DED4)),
+                      border: Border.all(color: AppTheme.borderSoft),
                     ),
                     child: TabBar(
                       controller: _tabs,

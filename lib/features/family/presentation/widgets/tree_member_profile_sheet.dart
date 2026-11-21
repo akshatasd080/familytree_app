@@ -56,7 +56,7 @@ Future<void> showTreeMemberProfileSheet({
         fullscreenDialog: true,
         barrierDismissible: false,
         pageBuilder: (ctx, animation, secondaryAnimation) => Scaffold(
-          backgroundColor: const Color(0xFFF6F4EF),
+          backgroundColor: AppTheme.canvas,
           body: SafeArea(child: buildSheet(ctx)),
         ),
         transitionsBuilder: (ctx, animation, secondaryAnimation, child) {
@@ -357,12 +357,12 @@ class _TreeMemberProfileSheetState extends State<_TreeMemberProfileSheet> {
     final sheetBody = Column(
               children: [
                 Container(
-                  color: const Color(0xFFF6F4EF),
+                  color: AppTheme.canvas,
                   padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
                   child: Row(
                     children: [
                       if (!widget.fullScreen)
-                        const Icon(Icons.drag_handle, size: 18, color: Color(0xFF94A3B8)),
+                        Icon(Icons.drag_handle, size: 18, color: AppTheme.muted),
                       if (!widget.fullScreen) const SizedBox(width: 6),
                       if (widget.fullScreen)
                         IconButton(
@@ -611,7 +611,7 @@ class _TreeMemberProfileSheetState extends State<_TreeMemberProfileSheet> {
                                   labelStyle: TextStyle(
                                     color: _tab == tab.$1
                                         ? Colors.black
-                                        : const Color(0xFF64748B),
+                                        : AppTheme.muted,
                                     fontWeight: FontWeight.w700,
                                     fontSize: 11,
                                   ),
@@ -628,9 +628,9 @@ class _TreeMemberProfileSheetState extends State<_TreeMemberProfileSheet> {
                         constraints: const BoxConstraints(minHeight: 140),
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
+                          color: AppTheme.softFill,
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                          border: Border.all(color: AppTheme.borderSoft),
                         ),
                         child: _buildTabBody(
                           educations: educations,
@@ -650,7 +650,7 @@ class _TreeMemberProfileSheetState extends State<_TreeMemberProfileSheet> {
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-                  color: const Color(0xFFFBF9F6),
+                  color: AppTheme.cream,
                   child: Column(
                     children: [
                       if (widget.isAdmin || _isMe)
@@ -728,7 +728,7 @@ class _TreeMemberProfileSheetState extends State<_TreeMemberProfileSheet> {
 
     if (widget.fullScreen) {
       return Material(
-        color: Colors.white,
+        color: AppTheme.card,
         child: sheetBody,
       );
     }
@@ -743,7 +743,7 @@ class _TreeMemberProfileSheetState extends State<_TreeMemberProfileSheet> {
             maxHeight: MediaQuery.sizeOf(context).height * 0.92,
           ),
           child: Material(
-            color: Colors.white,
+            color: AppTheme.card,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
             clipBehavior: Clip.antiAlias,
             child: sheetBody,
@@ -796,7 +796,7 @@ class _TreeMemberProfileSheetState extends State<_TreeMemberProfileSheet> {
             return ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: src == null
-                  ? Container(color: const Color(0xFFE2E8F0))
+                  ? Container(color: AppTheme.softFill)
                   : Image.network(src, fit: BoxFit.cover),
             );
           },
@@ -843,7 +843,7 @@ class _TreeMemberProfileSheetState extends State<_TreeMemberProfileSheet> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 28),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFF1F2),
+              color: AppTheme.dangerFill,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Column(
@@ -919,7 +919,7 @@ class _InfoRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 16, color: const Color(0xFF94A3B8)),
+          Icon(icon, size: 16, color: AppTheme.muted),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -951,11 +951,11 @@ class _EmptyTab extends StatelessWidget {
           Container(
             width: 42,
             height: 42,
-            decoration: const BoxDecoration(
-              color: Color(0xFFF1F5F9),
+            decoration: BoxDecoration(
+              color: AppTheme.softFill,
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: const Color(0xFF94A3B8), size: 20),
+            child: Icon(icon, color: AppTheme.muted, size: 20),
           ),
           const SizedBox(height: 10),
           Text(

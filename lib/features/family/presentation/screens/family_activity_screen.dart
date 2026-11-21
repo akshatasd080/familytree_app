@@ -308,7 +308,7 @@ class _FamilyActivityScreenState extends State<FamilyActivityScreen> {
             if (Navigator.of(context).canPop()) {
               Navigator.of(context).pop();
             } else {
-              context.openShell('/dashboard');
+              context.openShell('/family/media');
             }
           },
           icon: Icon(Icons.arrow_back_rounded, color: AppTheme.ink),
@@ -362,8 +362,8 @@ class _FamilyActivityScreenState extends State<FamilyActivityScreen> {
                             final item = _items[i];
                             return Material(
                               color: item.isRead
-                                  ? Colors.white
-                                  : const Color(0xFFF3FBF6),
+                                  ? AppTheme.card
+                                  : AppTheme.unreadFill,
                               borderRadius: BorderRadius.circular(16),
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(16),
@@ -373,7 +373,7 @@ class _FamilyActivityScreenState extends State<FamilyActivityScreen> {
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(16),
                                     border: Border.all(
-                                      color: const Color(0xFFD7E5DC),
+                                      color: AppTheme.borderSoft,
                                     ),
                                   ),
                                   child: Row(
@@ -479,7 +479,7 @@ class _FamilyActivityScreenState extends State<FamilyActivityScreen> {
                                                 Container(
                                               width: 56,
                                               height: 56,
-                                              color: const Color(0xFFE8F0EB),
+                                              color: AppTheme.softFill,
                                               child: Icon(
                                                 Icons.image_outlined,
                                                 color: AppTheme.muted,

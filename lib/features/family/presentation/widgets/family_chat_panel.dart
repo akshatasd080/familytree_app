@@ -261,18 +261,18 @@ class FamilyChatPanelState extends State<FamilyChatPanel> {
                       ),
                       isDense: true,
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: AppTheme.card,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 14,
                         vertical: 12,
                       ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(999),
-                        borderSide: const BorderSide(color: Color(0xFFD0DED4)),
+                        borderSide: BorderSide(color: AppTheme.borderSoft),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(999),
-                        borderSide: const BorderSide(color: Color(0xFFD0DED4)),
+                        borderSide: BorderSide(color: AppTheme.borderSoft),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(999),
@@ -284,7 +284,7 @@ class FamilyChatPanelState extends State<FamilyChatPanel> {
                 if (styled) ...[
                   const SizedBox(width: 10),
                   Material(
-                    color: Colors.white,
+                    color: AppTheme.card,
                     borderRadius: BorderRadius.circular(14),
                     child: InkWell(
                       onTap: () {
@@ -307,7 +307,7 @@ class FamilyChatPanelState extends State<FamilyChatPanel> {
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFFD0DED4)),
+                          border: Border.all(color: AppTheme.borderSoft),
                         ),
                         child: Icon(
                           Icons.tune_rounded,
@@ -439,7 +439,7 @@ class FamilyChatPanelState extends State<FamilyChatPanel> {
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: Material(
-                    color: Colors.white,
+                    color: AppTheme.card,
                     borderRadius: BorderRadius.circular(18),
                     elevation: 0,
                     child: InkWell(
@@ -449,7 +449,7 @@ class FamilyChatPanelState extends State<FamilyChatPanel> {
                         padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(18),
-                          border: Border.all(color: const Color(0xFFDCE8E0)),
+                          border: Border.all(color: AppTheme.borderSoft),
                           boxShadow: [
                             BoxShadow(
                               color: AppTheme.forest.withValues(alpha: 0.05),
@@ -495,7 +495,7 @@ class FamilyChatPanelState extends State<FamilyChatPanel> {
                                           : const Color(0xFFCBD5E1),
                                       shape: BoxShape.circle,
                                       border: Border.all(
-                                        color: Colors.white,
+                                        color: AppTheme.card,
                                         width: 2,
                                       ),
                                     ),

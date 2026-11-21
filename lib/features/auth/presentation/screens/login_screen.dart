@@ -8,6 +8,7 @@ import '../../../../core/network/api_exception.dart';
 import '../../../../core/utils/phone_utils.dart';
 import '../../../../core/widgets/ft_widgets.dart';
 import '../../../family/data/family_api_service.dart';
+import '../../../settings/presentation/providers/theme_settings_provider.dart';
 import '../providers/auth_providers.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -63,7 +64,7 @@ class _LoginScreenState extends State<LoginScreen> {
             email: _email.text,
             password: _password.text,
           );
-      if (mounted) context.go('/dashboard');
+      if (mounted) context.go('/family/media');
     } on ApiException catch (e) {
       setState(() {
         _inactive = e.isInactiveBlock;
@@ -317,6 +318,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeSettingsProvider>();
     return Scaffold(
       backgroundColor: AppTheme.canvas,
       body: SafeArea(
@@ -328,7 +330,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   const Spacer(),
                   Material(
-                    color: Colors.white,
+                    color: AppTheme.card,
                     borderRadius: BorderRadius.circular(12),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(12),
@@ -577,9 +579,13 @@ class _LoginScreenState extends State<LoginScreen> {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFFFFF1F2),
+            color: AppTheme.dangerFill,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFFFE4E6)),
+            border: Border.all(
+              color: AppTheme.isDark
+                  ? const Color(0xFF3F2028)
+                  : const Color(0xFFFFE4E6),
+            ),
           ),
           child: Text(
             _error!,

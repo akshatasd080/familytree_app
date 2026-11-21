@@ -7,7 +7,6 @@ class AppTheme {
   AppTheme._();
 
   static const Color defaultAccent = Color(0xFF3D6B4F);
-  static const Color forestDark = Color(0xFF345A43);
   static const Color accentPink = Color(0xFFFF5C8A);
   static const Color emerald50 = Color(0xFFECFDF5);
   static const Color emerald100 = Color(0xFFD1FAE5);
@@ -29,6 +28,10 @@ class AppTheme {
   /// Brand / primary — follows selected accent.
   static Color get forest => _accent;
 
+  /// Title/brand green that stays readable in both modes.
+  static Color get forestDark =>
+      _isDark ? const Color(0xFFB7DCC4) : const Color(0xFF345A43);
+
   static Color get ink =>
       _isDark ? const Color(0xFFF1F5F3) : const Color(0xFF1F2A24);
   static Color get inkSoft =>
@@ -40,7 +43,7 @@ class AppTheme {
   static Color get border =>
       _isDark ? const Color(0xFF3A4540) : const Color(0xFFD9D2C8);
   static Color get borderSoft =>
-      _isDark ? const Color(0xFF2F3A35) : const Color(0xFFE5DFD6);
+      _isDark ? const Color(0xFF2F3A35) : const Color(0xFFD7E5DC);
   static Color get canvas =>
       _isDark ? const Color(0xFF121816) : const Color(0xFFF7F4EF);
   static Color get cream =>
@@ -48,11 +51,19 @@ class AppTheme {
   static Color get tabTrack =>
       _isDark ? const Color(0xFF24302B) : const Color(0xFFEDE7DE);
   static Color get shellBg =>
-      _isDark ? const Color(0xFF0E1411) : const Color(0xFFF4F6F5);
+      _isDark ? const Color(0xFF0E1411) : const Color(0xFFF7F9F2);
   static Color get card =>
       _isDark ? const Color(0xFF1A221E) : Colors.white;
   static Color get drawerBg =>
-      _isDark ? const Color(0xFF15201B) : Colors.white;
+      _isDark ? const Color(0xFF15201B) : const Color(0xFFF7F9F2);
+
+  /// Soft inset / unread highlight surfaces.
+  static Color get softFill =>
+      _isDark ? const Color(0xFF222C27) : const Color(0xFFF8FAFC);
+  static Color get unreadFill =>
+      _isDark ? const Color(0xFF1E2E26) : const Color(0xFFF3FBF6);
+  static Color get dangerFill =>
+      _isDark ? const Color(0xFF2A151A) : const Color(0xFFFFF1F2);
 
   static TextStyle display({
     double size = 28,
@@ -94,17 +105,17 @@ class AppTheme {
   static Color _borderFor(bool dark) =>
       dark ? const Color(0xFF3A4540) : const Color(0xFFD9D2C8);
   static Color _borderSoftFor(bool dark) =>
-      dark ? const Color(0xFF2F3A35) : const Color(0xFFE5DFD6);
+      dark ? const Color(0xFF2F3A35) : const Color(0xFFD7E5DC);
   static Color _canvasFor(bool dark) =>
       dark ? const Color(0xFF121816) : const Color(0xFFF7F4EF);
   static Color _creamFor(bool dark) =>
       dark ? const Color(0xFF1A221E) : const Color(0xFFF4EFE6);
   static Color _shellBgFor(bool dark) =>
-      dark ? const Color(0xFF0E1411) : const Color(0xFFF4F6F5);
+      dark ? const Color(0xFF0E1411) : const Color(0xFFF7F9F2);
   static Color _cardFor(bool dark) =>
       dark ? const Color(0xFF1A221E) : Colors.white;
   static Color _drawerBgFor(bool dark) =>
-      dark ? const Color(0xFF15201B) : Colors.white;
+      dark ? const Color(0xFF15201B) : const Color(0xFFF7F9F2);
 
   static ThemeData _build(Brightness brightness) {
     final dark = brightness == Brightness.dark;
@@ -240,6 +251,19 @@ class AppTheme {
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         foregroundColor: Colors.black,
         backgroundColor: _accent,
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: cardC,
+        surfaceTintColor: Colors.transparent,
+        modalBackgroundColor: cardC,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: cardC,
+        surfaceTintColor: Colors.transparent,
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: cardC,
+        surfaceTintColor: Colors.transparent,
       ),
       chipTheme: ChipThemeData(
         backgroundColor: creamC,

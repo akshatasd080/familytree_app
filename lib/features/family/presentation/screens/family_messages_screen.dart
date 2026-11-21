@@ -332,16 +332,16 @@ class _FamilyMessagesScreenState extends State<FamilyMessagesScreen> {
 
   Widget _buildComposeBody() {
     return ColoredBox(
-      color: const Color(0xFFF4F6F5),
+      color: AppTheme.shellBg,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         children: [
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppTheme.card,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(color: AppTheme.borderSoft),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.06),
@@ -353,12 +353,12 @@ class _FamilyMessagesScreenState extends State<FamilyMessagesScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Message',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF334155),
+                    color: AppTheme.ink,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -367,24 +367,24 @@ class _FamilyMessagesScreenState extends State<FamilyMessagesScreen> {
                   maxLines: 6,
                   minLines: 5,
                   maxLength: 2000,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
-                    color: Color(0xFF0F172A),
+                    color: AppTheme.ink,
                   ),
                   decoration: InputDecoration(
                     hintText: 'Share something with the family…',
-                    hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
+                    hintStyle: TextStyle(color: AppTheme.muted),
                     filled: true,
-                    fillColor: const Color(0xFFF8FAFC),
-                    counterStyle: const TextStyle(color: Color(0xFF94A3B8)),
+                    fillColor: AppTheme.softFill,
+                    counterStyle: TextStyle(color: AppTheme.muted),
                     contentPadding: const EdgeInsets.all(14),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                      borderSide: BorderSide(color: AppTheme.border),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
+                      borderSide: BorderSide(color: AppTheme.border),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -396,12 +396,12 @@ class _FamilyMessagesScreenState extends State<FamilyMessagesScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   'Photo (optional)',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF334155),
+                    color: AppTheme.ink,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -413,9 +413,9 @@ class _FamilyMessagesScreenState extends State<FamilyMessagesScreen> {
                     OutlinedButton.icon(
                       onPressed: _composeSaving ? null : _pickComposeImage,
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF0F172A),
-                        backgroundColor: Colors.white,
-                        side: const BorderSide(color: Color(0xFFCBD5E1)),
+                        foregroundColor: AppTheme.ink,
+                        backgroundColor: AppTheme.card,
+                        side: BorderSide(color: AppTheme.border),
                       ),
                       icon: const Icon(Icons.add_photo_alternate_outlined),
                       label: Text(
@@ -460,8 +460,8 @@ class _FamilyMessagesScreenState extends State<FamilyMessagesScreen> {
                       child: OutlinedButton(
                         onPressed: _composeSaving ? null : _closeCompose,
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF0F172A),
-                          side: const BorderSide(color: Color(0xFFCBD5E1)),
+                          foregroundColor: AppTheme.ink,
+                          side: BorderSide(color: AppTheme.border),
                           minimumSize: const Size.fromHeight(48),
                         ),
                         child: const Text('Cancel'),
@@ -664,12 +664,12 @@ class _FamilyMessagesScreenState extends State<FamilyMessagesScreen> {
         title: 'Post family message',
         subtitle: 'Share with your family',
         scenicBackground: false,
-        backgroundColor: const Color(0xFFF4F6F5),
+        backgroundColor: AppTheme.shellBg,
         actions: [
           IconButton(
             tooltip: 'Close',
             onPressed: _composeSaving ? null : _closeCompose,
-            icon: const Icon(Icons.close, color: Color(0xFF334155)),
+            icon: Icon(Icons.close, color: AppTheme.ink),
           ),
         ],
         body: _buildComposeBody(),
@@ -731,10 +731,10 @@ class _NoticeCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.card,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isRead ? const Color(0xFFE2E8F0) : const Color(0xFFA7F3D0),
+          color: isRead ? AppTheme.borderSoft : const Color(0xFFA7F3D0),
           width: isRead ? 1 : 1.5,
         ),
         boxShadow: [
@@ -800,7 +800,7 @@ class _NoticeCard extends StatelessWidget {
               ],
             ),
           ),
-          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          Divider(height: 1, color: AppTheme.borderSoft),
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
             child: Column(
@@ -810,7 +810,7 @@ class _NoticeCard extends StatelessWidget {
                   body,
                   style: AppTheme.body(
                     size: 14,
-                    color: const Color(0xFF334155),
+                    color: AppTheme.ink,
                   ),
                 ),
                 if (location.isNotEmpty) ...[
@@ -821,7 +821,7 @@ class _NoticeCard extends StatelessWidget {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF8FAFC),
+                      color: AppTheme.softFill,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(

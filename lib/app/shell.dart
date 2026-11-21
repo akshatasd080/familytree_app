@@ -90,8 +90,8 @@ class _AppShellState extends State<AppShell> {
           router.pop();
           return;
         }
-        if (loc != '/dashboard') {
-          context.go('/dashboard');
+        if (loc != '/family/media' && loc != '/family/photos') {
+          context.go('/family/media');
           return;
         }
         SystemNavigator.pop();
@@ -118,7 +118,7 @@ class _AppShellState extends State<AppShell> {
                 width: 292,
                 child: Material(
                   elevation: 0,
-                  color: const Color(0xFFF7F9F2),
+                  color: AppTheme.drawerBg,
                   child: _AppDrawer(
                     familyName: family.current?.name ?? 'Family Tree',
                     userName: auth.user?.name ?? '',
@@ -219,14 +219,14 @@ class _AppDrawer extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 10),
-              _item(context, Icons.home_rounded, 'Home', '/dashboard'),
-              _item(context, Icons.park_rounded, 'Tree', '/family/tree'),
               _item(
                 context,
                 Icons.auto_awesome_mosaic_rounded,
                 'Feed',
                 '/family/media',
               ),
+              _item(context, Icons.home_rounded, 'Home', '/dashboard'),
+              _item(context, Icons.park_rounded, 'Tree', '/family/tree'),
               _item(
                 context,
                 Icons.chat_bubble_rounded,
@@ -277,7 +277,7 @@ class _AppDrawer extends StatelessWidget {
                 '/settings',
               ),
               Material(
-                color: const Color(0xFFFFF1F2),
+                color: AppTheme.dangerFill,
                 borderRadius: BorderRadius.circular(14),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(14),
@@ -347,7 +347,7 @@ class _AppDrawer extends StatelessWidget {
     }
     return Drawer(
       width: MediaQuery.sizeOf(context).width * 0.82,
-      backgroundColor: const Color(0xFFF7F9F2),
+      backgroundColor: AppTheme.drawerBg,
       child: SafeArea(child: content),
     );
   }
@@ -360,8 +360,12 @@ class _AppDrawer extends StatelessWidget {
     int badge = 0,
   }) {
     final loc = GoRouterState.of(context).matchedLocation;
-    final active =
-        loc == path || (path != '/dashboard' && loc.startsWith(path));
+    final active = loc == path ||
+        (path == '/family/media' &&
+            (loc == '/family/photos' || loc.startsWith('/family/media'))) ||
+        (path != '/dashboard' &&
+            path != '/family/media' &&
+            loc.startsWith(path));
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Material(
@@ -382,7 +386,7 @@ class _AppDrawer extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: active
                         ? AppTheme.forest.withValues(alpha: 0.16)
-                        : const Color(0xFFE8F0EA),
+                        : AppTheme.softFill,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(

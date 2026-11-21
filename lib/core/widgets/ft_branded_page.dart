@@ -16,7 +16,7 @@ class FtBrandedPage extends StatelessWidget {
     this.actions,
     this.floatingActionButton,
     this.scenicBackground = true,
-    this.backgroundColor = const Color(0xFFF7F9F2),
+    this.backgroundColor,
   });
 
   final String title;
@@ -25,23 +25,24 @@ class FtBrandedPage extends StatelessWidget {
   final List<Widget>? actions;
   final Widget? floatingActionButton;
   final bool scenicBackground;
-  final Color backgroundColor;
+  final Color? backgroundColor;
 
   @override
   Widget build(BuildContext context) {
     context.watch<ThemeSettingsProvider>();
     final wide = MediaQuery.sizeOf(context).width >= 840;
     final canOpenDrawer = !wide && Scaffold.maybeOf(context)?.hasDrawer == true;
+    final bg = backgroundColor ?? AppTheme.shellBg;
 
     return Material(
-      color: backgroundColor,
+      color: bg,
       child: Stack(
         children: [
           if (scenicBackground)
             Positioned.fill(
               child: IgnorePointer(
                 child: Opacity(
-                  opacity: 0.16,
+                  opacity: AppTheme.isDark ? 0.08 : 0.16,
                   child: Image.asset(
                     'assets/images/tree_canvas_bg.jpg',
                     fit: BoxFit.cover,
@@ -122,7 +123,7 @@ class FtBrandedPage extends StatelessWidget {
   }
 }
 
-/// Soft white content card used across branded screens.
+/// Soft content card used across branded screens.
 class FtSoftCard extends StatelessWidget {
   const FtSoftCard({
     super.key,
@@ -139,17 +140,18 @@ class FtSoftCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    context.watch<ThemeSettingsProvider>();
     final card = Container(
       width: double.infinity,
       margin: margin,
       padding: padding,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.96),
+        color: AppTheme.card.withValues(alpha: AppTheme.isDark ? 1 : 0.96),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFD7E5DC)),
+        border: Border.all(color: AppTheme.borderSoft),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.forest.withValues(alpha: 0.05),
+            color: AppTheme.forest.withValues(alpha: AppTheme.isDark ? 0.12 : 0.05),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),

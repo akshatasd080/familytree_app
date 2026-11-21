@@ -52,7 +52,14 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
   bool _searchOpen = false;
   String _treeThemeId = defaultTreeThemeId;
 
-  TreeTheme get _treeTheme => getTreeTheme(_treeThemeId);
+  TreeTheme get _treeTheme {
+    final base = getTreeTheme(_treeThemeId);
+    // App dark mode: force a dark diagram theme so cards aren't white-on-black.
+    if (AppTheme.isDark && base.mode != 'dark') {
+      return getTreeTheme('midnight');
+    }
+    return base;
+  }
 
   @override
   void initState() {
@@ -734,7 +741,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
     return Stack(
       children: [
         Material(
-          color: const Color(0xFFF4F8F5),
+          color: AppTheme.shellBg,
           child: Column(
             children: [
               SafeArea(
@@ -962,7 +969,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                           children: [
                             // Always pinned — switch Diagram / List / Root without back.
                             Material(
-                              color: const Color(0xFFF7F9F2),
+                              color: AppTheme.shellBg,
                               child: Padding(
                                 padding:
                                     const EdgeInsets.fromLTRB(12, 8, 12, 4),
@@ -1066,12 +1073,11 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                                   horizontal: 10,
                                                 ),
                                                 decoration: BoxDecoration(
-                                                  color: const Color(0xFFF7FBF8),
+                                                  color: AppTheme.softFill,
                                                   borderRadius:
                                                       BorderRadius.circular(999),
                                                   border: Border.all(
-                                                    color:
-                                                        const Color(0xFFD7E5DC),
+                                                    color: AppTheme.borderSoft,
                                                   ),
                                                 ),
                                                 child:
@@ -1172,7 +1178,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                             hintText: 'Search name or mobile…',
                                             isDense: true,
                                             filled: true,
-                                            fillColor: const Color(0xFFF7FBF8),
+                                            fillColor: AppTheme.softFill,
                                             prefixIcon: Icon(
                                               Icons.search_rounded,
                                               size: 18,
@@ -1206,15 +1212,15 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                             border: OutlineInputBorder(
                                               borderRadius:
                                                   BorderRadius.circular(999),
-                                              borderSide: const BorderSide(
-                                                color: Color(0xFFD7E5DC),
+                                              borderSide: BorderSide(
+                                                color: AppTheme.borderSoft,
                                               ),
                                             ),
                                             enabledBorder: OutlineInputBorder(
                                               borderRadius:
                                                   BorderRadius.circular(999),
-                                              borderSide: const BorderSide(
-                                                color: Color(0xFFD7E5DC),
+                                              borderSide: BorderSide(
+                                                color: AppTheme.borderSoft,
                                               ),
                                             ),
                                             focusedBorder: OutlineInputBorder(
@@ -1243,7 +1249,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                               elevation: 6,
                                               borderRadius:
                                                   BorderRadius.circular(12),
-                                              color: Colors.white,
+                                              color: AppTheme.card,
                                               child: ConstrainedBox(
                                                 constraints: const BoxConstraints(
                                                   maxHeight: 220,
@@ -1541,9 +1547,9 @@ class _ToolbarCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.94),
+        color: AppTheme.card.withValues(alpha: 0.94),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFD7E5DC)),
+        border: Border.all(color: AppTheme.borderSoft),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF1F2A24).withValues(alpha: 0.05),
@@ -1572,9 +1578,9 @@ class _ViewModeToggle extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: const Color(0xFFEDF5F0),
+        color: AppTheme.tabTrack,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFD7E5DC)),
+        border: Border.all(color: AppTheme.borderSoft),
       ),
       child: Row(
         children: [
@@ -1681,11 +1687,11 @@ class _ModeToggle extends StatelessWidget {
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: selected
-              ? (filled ? AppTheme.forest : Colors.white)
-              : Colors.white,
+              ? (filled ? AppTheme.forest : AppTheme.card)
+              : AppTheme.card,
           borderRadius: BorderRadius.circular(999),
           border: Border.all(
-            color: selected ? AppTheme.forest : const Color(0xFFD7E5DC),
+            color: selected ? AppTheme.forest : AppTheme.borderSoft,
           ),
           boxShadow: selected
               ? [
@@ -1778,9 +1784,9 @@ class _GenerationsList extends StatelessWidget {
         return Container(
           margin: const EdgeInsets.only(bottom: 10),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: AppTheme.card,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            border: Border.all(color: AppTheme.borderSoft),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

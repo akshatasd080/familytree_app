@@ -102,7 +102,7 @@ class _FamilyJoinScreenState extends State<FamilyJoinScreen> {
             );
       }
       if (!mounted) return;
-      context.go('/dashboard');
+      context.go('/family/media');
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {

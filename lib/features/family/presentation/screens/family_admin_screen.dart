@@ -185,7 +185,7 @@ class _FamilyAdminScreenState extends State<FamilyAdminScreen> {
                                   Image.network(url, fit: BoxFit.cover)
                                 else
                                   Container(
-                                    color: const Color(0xFFECFDF5),
+                                    color: AppTheme.softFill,
                                     child: Icon(
                                       Icons.park,
                                       size: 48,

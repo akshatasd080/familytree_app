@@ -134,7 +134,7 @@ class _MemberPreviewSheet extends StatelessWidget {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFCBD5E1),
+                    color: AppTheme.border,
                     borderRadius: BorderRadius.circular(99),
                   ),
                 ),
@@ -165,13 +165,13 @@ class _MemberPreviewSheet extends StatelessWidget {
                           width: double.infinity,
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            gradient: const LinearGradient(
+                            gradient: LinearGradient(
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
-                              colors: [Color(0xFFECFDF5), Color(0xFFF8FAFC)],
+                              colors: [AppTheme.unreadFill, AppTheme.softFill],
                             ),
                             borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: const Color(0xFFD1FAE5)),
+                            border: Border.all(color: AppTheme.borderSoft),
                           ),
                           child: Row(
                             children: [
@@ -630,9 +630,9 @@ class _InfoTile extends StatelessWidget {
       margin: EdgeInsets.only(bottom: last ? 0 : 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: AppTheme.softFill,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: AppTheme.borderSoft),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

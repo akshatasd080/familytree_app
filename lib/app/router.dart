@@ -41,7 +41,7 @@ GoRouter createRouter(AuthProvider auth) {
       if (!auth.isAuthenticated && !isPublic) return '/login';
       if (auth.isAuthenticated &&
           (loc == '/login' || loc == '/' || loc == '/family/register')) {
-        return '/dashboard';
+        return '/family/media';
       }
       return null;
     },

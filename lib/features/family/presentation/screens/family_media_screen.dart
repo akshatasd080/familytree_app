@@ -1,5 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +9,7 @@ import '../../../../app/router.dart';
 import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
 import '../../../../core/widgets/ft_branded_page.dart';
+import '../../../../core/widgets/ft_widgets.dart';
 import '../../../../core/widgets/responsive.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../data/family_api_service.dart';
@@ -188,7 +190,7 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.card,
       showDragHandle: true,
       builder: (ctx) {
         return SizedBox(
@@ -308,7 +310,7 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
                               },
                               child: src == null
                                   ? Container(
-                                      color: const Color(0xFFE2E8F0),
+                                      color: AppTheme.softFill,
                                       alignment: Alignment.center,
                                       padding: const EdgeInsets.all(6),
                                       child: Text(
@@ -423,7 +425,7 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
+                color: AppTheme.softFill,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: AppTheme.borderSoft),
               ),
@@ -1195,12 +1197,15 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
                     const Spacer(),
                     Padding(
                       padding: const EdgeInsets.only(right: 12),
-                      child: Text(
-                        '${_comments(item).length} comments',
-                        style: AppTheme.body(
-                          size: 12,
-                          weight: FontWeight.w600,
-                          color: AppTheme.mutedSoft,
+                      child: GestureDetector(
+                        onTap: () => _openPost(item),
+                        child: Text(
+                          '${_comments(item).length} comments',
+                          style: AppTheme.body(
+                            size: 12,
+                            weight: FontWeight.w600,
+                            color: AppTheme.mutedSoft,
+                          ),
                         ),
                       ),
                     ),
@@ -1220,7 +1225,7 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
               ),
               if (caption.isNotEmpty && url != null)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
                   child: RichText(
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
@@ -1250,54 +1255,6 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
                       ],
                     ),
                   ),
-                ),
-              if (_comments(item).isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (final c in _comments(item).reversed.take(3))
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: RichText(
-                            text: TextSpan(
-                              style: AppTheme.body(size: 13),
-                              children: [
-                                WidgetSpan(
-                                  alignment: PlaceholderAlignment.baseline,
-                                  baseline: TextBaseline.alphabetic,
-                                  child: GestureDetector(
-                                    onTap: () =>
-                                        _openCommentAuthorProfile(c),
-                                    child: Text(
-                                      '${_commentAuthor(c)} ',
-                                      style: AppTheme.body(
-                                        size: 13,
-                                        weight: FontWeight.w800,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                TextSpan(text: _commentBody(c)),
-                              ],
-                            ),
-                          ),
-                        ),
-                      if (_comments(item).length > 3)
-                        GestureDetector(
-                          onTap: () => _openPost(item),
-                          child: Text(
-                            'View all ${_comments(item).length} comments',
-                            style: AppTheme.body(
-                              size: 12,
-                              weight: FontWeight.w700,
-                              color: AppTheme.muted,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
                 )
               else
                 const SizedBox(height: 8),
@@ -1320,10 +1277,30 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
           onPressed: () => context.openShell('/family/chat'),
           icon: Icon(Icons.chat_bubble_outline_rounded, color: AppTheme.ink),
         ),
-        IconButton(
-          tooltip: 'Refresh',
-          onPressed: _load,
-          icon: Icon(Icons.refresh_rounded, color: AppTheme.ink),
+        Builder(
+          builder: (context) {
+            final unread =
+                context.watch<FamilyNoticesUnreadProvider>().unreadCount;
+            return Stack(
+              clipBehavior: Clip.none,
+              children: [
+                IconButton(
+                  tooltip: 'Notifications',
+                  onPressed: () => context.push('/family/activity'),
+                  icon: Icon(
+                    Icons.notifications_outlined,
+                    color: AppTheme.ink,
+                  ),
+                ),
+                if (unread > 0)
+                  Positioned(
+                    right: 6,
+                    top: 6,
+                    child: FtCountBadge(count: unread, compact: true),
+                  ),
+              ],
+            );
+          },
         ),
       ],
       floatingActionButton: FloatingActionButton(

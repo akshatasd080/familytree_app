@@ -56,7 +56,7 @@ class _FamilyVerifyOtpScreenState extends State<FamilyVerifyOtpScreen> {
             );
       }
       if (!mounted) return;
-      context.go('/dashboard');
+      context.go('/family/media');
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {

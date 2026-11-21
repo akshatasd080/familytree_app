@@ -442,7 +442,7 @@ class _FamilyMapScreenState extends State<FamilyMapScreen> {
                               hintText: 'Search member or city…',
                               prefixIcon: const Icon(Icons.search),
                               filled: true,
-                              fillColor: const Color(0xFFF8FAFC),
+                              fillColor: AppTheme.softFill,
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(14),
                                 borderSide: BorderSide.none,
@@ -532,8 +532,8 @@ class _FamilyMapScreenState extends State<FamilyMapScreen> {
                                       const EdgeInsets.only(bottom: 8),
                                   child: Material(
                                     color: active
-                                        ? const Color(0xFFECFDF5)
-                                        : const Color(0xFFF8FAFC),
+                                        ? AppTheme.unreadFill
+                                        : AppTheme.softFill,
                                     borderRadius: BorderRadius.circular(14),
                                     child: InkWell(
                                       onTap: () => _focusPin(pin),

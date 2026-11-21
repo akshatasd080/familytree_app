@@ -285,19 +285,21 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
         Rect.fromLTWH(x, y, w, h),
         const Radius.circular(12),
       );
-      canvas.drawRRect(rrect, Paint()..color = Colors.white);
+      canvas.drawRRect(rrect, Paint()..color = theme.cardBg);
       canvas.drawRRect(
         rrect,
         Paint()
-          ..color = isMe ? const Color(0xFFF59E0B) : const Color(0xFFE2E8F0)
+          ..color = isMe
+              ? const Color(0xFFF59E0B)
+              : theme.cardBorder
           ..style = PaintingStyle.stroke
           ..strokeWidth = isMe ? 2.5 : 1.5,
       );
       final nameTp = TextPainter(
         text: TextSpan(
           text: name,
-          style: const TextStyle(
-            color: Color(0xFF0F172A),
+          style: TextStyle(
+            color: theme.cardText,
             fontSize: 13,
             fontWeight: FontWeight.w700,
           ),
@@ -310,8 +312,8 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
       final roleTp = TextPainter(
         text: TextSpan(
           text: isMe ? 'You' : role,
-          style: const TextStyle(
-            color: Color(0xFF1D4ED8),
+          style: TextStyle(
+            color: theme.lines.parent,
             fontSize: 11,
             fontWeight: FontWeight.w600,
           ),
