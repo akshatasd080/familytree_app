@@ -866,13 +866,33 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                       );
                         return Column(
                           children: [
+                            // Always pinned — switch Diagram / List / Root without back.
+                            Material(
+                              color: const Color(0xFFF7F9F2),
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                                child: _ViewModeToggle(
+                                  mode: _viewMode,
+                                  onChanged: (mode) {
+                                    if (mode == _viewMode) return;
+                                    setState(() {
+                                      _viewMode = mode;
+                                      _searchOpen = false;
+                                      _selected = null;
+                                    });
+                                  },
+                                ),
+                              ),
+                            ),
                             ConstrainedBox(
-                              constraints:
-                                  BoxConstraints(maxHeight: maxToolbar),
+                              constraints: BoxConstraints(
+                                maxHeight: (maxToolbar - 48).clamp(96.0, 300.0),
+                              ),
                               child: ListView(
                                 shrinkWrap: true,
                                 padding:
-                                    const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                                    const EdgeInsets.fromLTRB(12, 0, 12, 4),
                                 children: [
                               if (session.families.length > 1)
                                 SizedBox(
@@ -1028,12 +1048,6 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                       ),
                                       const SizedBox(height: 10),
                                     ],
-                                    _ViewModeToggle(
-                                      mode: _viewMode,
-                                      onChanged: (mode) =>
-                                          setState(() => _viewMode = mode),
-                                    ),
-                                    const SizedBox(height: 10),
                                     _ModeToggle(
                                       left: 'Complete Tree',
                                       right: 'My Circle',
