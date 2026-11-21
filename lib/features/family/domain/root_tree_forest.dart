@@ -35,6 +35,17 @@ class RootTreeNode {
   final String? spouseId;
   final String? spousePhoto;
   final List<RootTreeNode> children;
+
+  /// Shape expected by web `parivaar-root.html` bootstrap.
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'photo': photo,
+        'spouse': spouse,
+        'spouseId': spouseId,
+        'spousePhoto': spousePhoto,
+        'children': children.map((c) => c.toJson()).toList(),
+      };
 }
 
 String? _personPhoto(FamilyMember member) {

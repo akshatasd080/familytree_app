@@ -797,6 +797,8 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                         relationships:
                                             _tree?.relationships ?? const [],
                                         selectedId: _selected?.id,
+                                        familyName:
+                                            session.current?.name ?? 'Family',
                                         onSelect: _openMemberProfile,
                                       )
                                     : Stack(
