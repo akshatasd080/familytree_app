@@ -218,13 +218,12 @@ class _AppDrawer extends StatelessWidget {
               ),
               _item(
                 context,
-                Icons.campaign_rounded,
-                'Notices',
+                Icons.chat_bubble_outline_rounded,
+                'imp-Messages',
                 '/family/messages',
                 badge: messagesUnread,
               ),
               _item(context, Icons.person_rounded, 'Profile', '/family/profile'),
-              _item(context, Icons.groups_rounded, 'Members', '/family/members'),
               _item(context, Icons.map_rounded, 'Map', '/family/map'),
               _item(context, Icons.event_rounded, 'Events', '/family/events'),
               _item(

@@ -18,7 +18,7 @@ class ApiConstants {
     switch (current) {
       case Environment.local:
         // Phone must use the PC's LAN address. localhost would be the phone itself.
-        return 'http://192.168.1.15:3004/api';
+        return 'http://192.168.1.6:3004/api';
       case Environment.uat:
         return 'https://familytree.dhilwari.com/api';
       case Environment.prod:

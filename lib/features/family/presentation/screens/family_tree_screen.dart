@@ -756,7 +756,7 @@ class _FamilyTreeScreenState extends State<FamilyTreeScreen> {
                                 child: Padding(
                                   padding: const EdgeInsets.all(24),
                                   child: Text(
-                                    'No members on the tree yet. Add people from Members.',
+                                    'No members on the tree yet. Add people from Family Admin.',
                                     textAlign: TextAlign.center,
                                     style: AppTheme.body(color: AppTheme.muted),
                                   ),

@@ -10,7 +10,6 @@ import '../features/family/presentation/screens/family_events_screen.dart';
 import '../features/family/presentation/screens/family_join_screen.dart';
 import '../features/family/presentation/screens/family_map_screen.dart';
 import '../features/family/presentation/screens/family_media_screen.dart';
-import '../features/family/presentation/screens/family_members_screen.dart';
 import '../features/family/presentation/screens/family_messages_screen.dart';
 import '../features/family/presentation/screens/family_privacy_screen.dart';
 import '../features/family/presentation/screens/family_profile_screen.dart';
@@ -71,14 +70,6 @@ GoRouter createRouter(AuthProvider auth) {
           GoRoute(
             path: '/dashboard',
             builder: (_, __) => const DashboardScreen(),
-          ),
-          GoRoute(
-            path: '/family/members',
-            builder: (_, __) => const FamilyMembersScreen(),
-          ),
-          GoRoute(
-            path: '/family/invitations',
-            builder: (_, __) => const FamilyMembersScreen(),
           ),
           GoRoute(
             path: '/family/tree',

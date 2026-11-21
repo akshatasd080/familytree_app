@@ -346,11 +346,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         clipBehavior: Clip.none,
                         children: [
                           IconButton(
-                            tooltip: 'Notices',
+                            tooltip: 'imp-Messages',
                             onPressed: () =>
                                 context.openShell('/family/messages'),
                             icon: Icon(
-                              Icons.notifications_none_rounded,
+                              Icons.chat_bubble_outline_rounded,
                               color: AppTheme.ink,
                             ),
                           ),

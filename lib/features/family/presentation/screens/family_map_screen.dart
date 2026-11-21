@@ -394,9 +394,9 @@ class _FamilyMapScreenState extends State<FamilyMapScreen> {
                                             const Color(0xFF0284C7),
                                       ),
                                       onPressed: () =>
-                                          context.openShell('/family/members'),
+                                          context.openShell('/family/profile'),
                                       child: const Text(
-                                        'Add member location',
+                                        'Add your location',
                                       ),
                                     ),
                                   ],
@@ -656,9 +656,9 @@ class _FamilyMapScreenState extends State<FamilyMapScreen> {
                                   alignment: Alignment.centerLeft,
                                   child: TextButton(
                                     onPressed: () =>
-                                        context.openShell('/family/members'),
+                                        context.openShell('/family/profile'),
                                     child: const Text(
-                                      'Add locations from Members',
+                                      'Add your location in Profile',
                                     ),
                                   ),
                                 ),
