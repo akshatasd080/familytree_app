@@ -9,6 +9,7 @@ import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
 import '../../../../core/widgets/ft_branded_page.dart';
 import '../../../../core/widgets/responsive.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../data/family_api_service.dart';
 import '../../data/models/family_models.dart';
 import '../providers/family_providers.dart';
@@ -93,16 +94,246 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
             ?.toString(),
       );
 
+  Map<String, dynamic>? _asMap(dynamic raw) {
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return null;
+  }
+
   String _author(Map<String, dynamic> item) {
-    final user = item['user'] is Map
-        ? Map<String, dynamic>.from(item['user'] as Map)
-        : null;
-    return (item['authorName'] ??
+    final author = _asMap(item['author']);
+    final user = _asMap(item['user']);
+    final name = (item['authorName'] ??
             item['uploadedByName'] ??
+            author?['name'] ??
             user?['name'] ??
             item['name'] ??
-            'Family')
-        .toString();
+            '')
+        .toString()
+        .trim();
+    return name.isEmpty ? 'Family' : name;
+  }
+
+  String? _authorUserId(Map<String, dynamic> item) {
+    final author = _asMap(item['author']);
+    final user = _asMap(item['user']);
+    final id = (item['userId'] ??
+            item['user_id'] ??
+            item['authorId'] ??
+            item['uploadedBy'] ??
+            author?['id'] ??
+            user?['id'] ??
+            '')
+        .toString()
+        .trim();
+    return id.isEmpty ? null : id;
+  }
+
+  String? _authorAvatarUrl(Map<String, dynamic> item) {
+    final author = _asMap(item['author']);
+    final user = _asMap(item['user']);
+    return mediaUrl(
+      (item['authorAvatar'] ??
+              author?['avatar'] ??
+              user?['avatar'] ??
+              '')
+          .toString(),
+    );
+  }
+
+  FamilyMember? _memberForUserId(String? userId) {
+    if (userId == null || userId.isEmpty) return null;
+    for (final m in _members) {
+      if (m.userId == userId || m.id == userId) return m;
+    }
+    return null;
+  }
+
+  void _openUserProfile({
+    FamilyMember? member,
+    String? userId,
+    String? name,
+    String? avatarUrl,
+  }) {
+    final meId = context.read<AuthProvider>().user?.id;
+    final resolved = member ?? _memberForUserId(userId);
+    final resolvedId = resolved?.userId ?? resolved?.id ?? userId;
+    final isMe = meId != null &&
+        meId.isNotEmpty &&
+        (resolvedId == meId ||
+            resolved?.userId == meId ||
+            resolved?.id == meId);
+
+    if (isMe) {
+      context.openShell('/family/profile');
+      return;
+    }
+
+    final displayName =
+        (resolved?.name ?? name ?? 'Family member').trim();
+    final avatar = mediaUrl(resolved?.avatar) ?? avatarUrl;
+    final peerId = resolved?.userId ?? userId;
+    final posts = _media.where((p) {
+      final aid = _authorUserId(p);
+      if (peerId != null && peerId.isNotEmpty && aid == peerId) return true;
+      if (resolved != null &&
+          (aid == resolved.id || aid == resolved.userId)) {
+        return true;
+      }
+      // Fallback: match by author name when ids missing.
+      return _author(p).toLowerCase() == displayName.toLowerCase();
+    }).toList();
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.white,
+      showDragHandle: true,
+      builder: (ctx) {
+        return SizedBox(
+          height: MediaQuery.sizeOf(ctx).height * 0.88,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 36,
+                      backgroundColor:
+                          AppTheme.forest.withValues(alpha: 0.12),
+                      backgroundImage:
+                          avatar != null ? NetworkImage(avatar) : null,
+                      child: avatar == null
+                          ? Text(
+                              displayName.isNotEmpty
+                                  ? displayName[0].toUpperCase()
+                                  : '?',
+                              style: AppTheme.display(
+                                size: 28,
+                                color: AppTheme.forest,
+                              ),
+                            )
+                          : null,
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            displayName,
+                            style: AppTheme.display(size: 20),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${posts.length} post${posts.length == 1 ? '' : 's'}',
+                            style: AppTheme.body(
+                              size: 13,
+                              color: AppTheme.muted,
+                            ),
+                          ),
+                          if ((resolved?.relationship ?? '')
+                              .trim()
+                              .isNotEmpty)
+                            Text(
+                              resolved!.relationship!,
+                              style: AppTheme.body(
+                                size: 12,
+                                color: AppTheme.mutedSoft,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                if (peerId != null &&
+                    peerId.isNotEmpty &&
+                    resolved?.hasLoginAccount == true &&
+                    resolved?.isAlive != false)
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppTheme.forest,
+                        foregroundColor: Colors.black,
+                      ),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        context.openShell('/family/chat');
+                      },
+                      icon: const Icon(Icons.chat_bubble_outline),
+                      label: const Text('Message'),
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Icon(Icons.grid_on_rounded, size: 18, color: AppTheme.ink),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Posts',
+                      style: AppTheme.body(weight: FontWeight.w800),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: posts.isEmpty
+                      ? Center(
+                          child: Text(
+                            'No posts from $displayName yet.',
+                            style: AppTheme.body(color: AppTheme.muted),
+                          ),
+                        )
+                      : GridView.builder(
+                          itemCount: posts.length,
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            crossAxisSpacing: 2,
+                            mainAxisSpacing: 2,
+                          ),
+                          itemBuilder: (_, i) {
+                            final post = posts[i];
+                            final src = _imageUrl(post);
+                            return InkWell(
+                              onTap: () {
+                                Navigator.pop(ctx);
+                                _openPost(post);
+                              },
+                              child: src == null
+                                  ? Container(
+                                      color: const Color(0xFFE2E8F0),
+                                      alignment: Alignment.center,
+                                      padding: const EdgeInsets.all(6),
+                                      child: Text(
+                                        (post['caption'] ?? 'Post')
+                                            .toString(),
+                                        maxLines: 3,
+                                        overflow: TextOverflow.ellipsis,
+                                        textAlign: TextAlign.center,
+                                        style: AppTheme.body(size: 11),
+                                      ),
+                                    )
+                                  : CachedNetworkImage(
+                                      imageUrl: src,
+                                      fit: BoxFit.cover,
+                                    ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   int _likes(Map<String, dynamic> item) {
@@ -117,9 +348,104 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
   bool _likedByMe(Map<String, dynamic> item) =>
       item['likedByMe'] == true || item['liked'] == true;
 
-  List _comments(Map<String, dynamic> item) {
+  List<Map<String, dynamic>> _comments(Map<String, dynamic> item) {
     final c = item['comments'];
-    return c is List ? c : const [];
+    if (c is! List) return const [];
+    return c
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  String _commentAuthor(Map<String, dynamic> c) {
+    final author = _asMap(c['author']);
+    final user = _asMap(c['user']);
+    final name = (c['authorName'] ??
+            c['userName'] ??
+            c['name'] ??
+            author?['name'] ??
+            user?['name'] ??
+            '')
+        .toString()
+        .trim();
+    return name.isEmpty ? 'Family member' : name;
+  }
+
+  String _commentBody(Map<String, dynamic> c) =>
+      (c['body'] ?? c['text'] ?? c['comment'] ?? '').toString().trim();
+
+  String _likesLabel(Map<String, dynamic> item) {
+    final n = _likes(item);
+    final mine = _likedByMe(item);
+    if (n <= 0) return 'No likes yet';
+    if (mine && n == 1) return 'Liked by you';
+    if (mine) return 'Liked by you and ${n - 1} other${n - 1 == 1 ? '' : 's'}';
+    return '$n like${n == 1 ? '' : 's'}';
+  }
+
+  void _openCommentAuthorProfile(Map<String, dynamic> c) {
+    final uid = _authorUserId(c);
+    _openUserProfile(
+      member: _memberForUserId(uid),
+      userId: uid,
+      name: _commentAuthor(c),
+      avatarUrl: _authorAvatarUrl(c),
+    );
+  }
+
+  Widget _commentBubble(Map<String, dynamic> c) {
+    final name = _commentAuthor(c);
+    final body = _commentBody(c);
+    if (body.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: () => _openCommentAuthorProfile(c),
+            borderRadius: BorderRadius.circular(99),
+            child: CircleAvatar(
+              radius: 14,
+              backgroundColor: AppTheme.forest.withValues(alpha: 0.12),
+              child: Text(
+                name.isNotEmpty ? name[0].toUpperCase() : '?',
+                style: AppTheme.body(
+                  size: 11,
+                  weight: FontWeight.w800,
+                  color: AppTheme.forest,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.borderSoft),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  InkWell(
+                    onTap: () => _openCommentAuthorProfile(c),
+                    child: Text(
+                      name,
+                      style: AppTheme.body(size: 12, weight: FontWeight.w800),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(body, style: AppTheme.body(size: 13)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   static const _feelingTabs = <(String, String, List<(String, String)>)>[
@@ -375,7 +701,7 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
       builder: (ctx) {
         var likes = _likes(item);
         var liked = _likedByMe(item);
-        var comments = [..._comments(item)];
+        var comments = List<Map<String, dynamic>>.from(_comments(item));
         return StatefulBuilder(
           builder: (ctx, setLocal) {
             final url = _imageUrl(item);
@@ -466,7 +792,17 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
                                     color: AppTheme.accentPink,
                                   ),
                                 ),
-                                Text('$likes likes'),
+                                Text(
+                                  liked
+                                      ? (likes <= 1
+                                          ? 'Liked by you'
+                                          : 'Liked by you · $likes')
+                                      : '$likes like${likes == 1 ? '' : 's'}',
+                                  style: AppTheme.body(
+                                    size: 13,
+                                    weight: FontWeight.w700,
+                                  ),
+                                ),
                                 const Spacer(),
                                 IconButton(
                                   onPressed: () async {
@@ -491,30 +827,25 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
                               ],
                             ),
                             Text(
-                              'Comments',
+                              'Comments (${comments.length})',
                               style: AppTheme.body(weight: FontWeight.w700),
                             ),
+                            const SizedBox(height: 6),
                             Expanded(
-                              child: ListView(
-                                children: [
-                                  for (final c in comments)
-                                    if (c is Map)
-                                      ListTile(
-                                        dense: true,
-                                        contentPadding: EdgeInsets.zero,
-                                        title: Text(
-                                          (c['body'] ?? c['text'] ?? '')
-                                              .toString(),
-                                        ),
-                                        subtitle: Text(
-                                          (c['authorName'] ??
-                                                  c['user']?['name'] ??
-                                                  '')
-                                              .toString(),
-                                        ),
+                              child: comments.isEmpty
+                                  ? Text(
+                                      'No comments yet — be the first.',
+                                      style: AppTheme.body(
+                                        size: 13,
+                                        color: AppTheme.muted,
                                       ),
-                                ],
-                              ),
+                                    )
+                                  : ListView(
+                                      children: [
+                                        for (final c in comments)
+                                          _commentBubble(c),
+                                      ],
+                                    ),
                             ),
                             Row(
                               children: [
@@ -531,20 +862,29 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
                                     final body = commentCtrl.text.trim();
                                     if (body.isEmpty) return;
                                     try {
-                                      await context
+                                      final res = await context
                                           .read<FamilyApiService>()
                                           .commentFamilyMedia(
                                             familyId,
                                             id,
                                             body,
                                           );
+                                      final data = res.data is Map
+                                          ? Map<String, dynamic>.from(
+                                              res.data as Map,
+                                            )
+                                          : <String, dynamic>{};
+                                      final created = _asMap(data['comment']) ??
+                                          <String, dynamic>{
+                                            'body': body,
+                                            'author': {'name': 'You'},
+                                          };
                                       setLocal(() {
-                                        comments = [
-                                          ...comments,
-                                          {'body': body, 'authorName': 'You'},
-                                        ];
+                                        comments = [...comments, created];
+                                        item['comments'] = comments;
                                         commentCtrl.clear();
                                       });
+                                      if (mounted) setState(() {});
                                     } catch (e) {
                                       if (!ctx.mounted) return;
                                       ScaffoldMessenger.of(ctx).showSnackBar(
@@ -624,7 +964,7 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
           return _StoryBubble(
             label: m.name.split(' ').first,
             avatarUrl: mediaUrl(m.avatar),
-            onTap: () => context.openShell('/family/tree'),
+            onTap: () => _openUserProfile(member: m),
           );
         },
       ),
@@ -693,57 +1033,83 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
                 padding: const EdgeInsets.fromLTRB(14, 12, 8, 10),
                 child: Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          colors: [
-                            AppTheme.forest,
-                            AppTheme.emerald600,
-                            const Color(0xFFD4AF68),
-                          ],
-                        ),
+                    InkWell(
+                      onTap: () => _openUserProfile(
+                        member: _memberForUserId(_authorUserId(item)),
+                        userId: _authorUserId(item),
+                        name: author,
+                        avatarUrl: _authorAvatarUrl(item),
                       ),
-                      child: CircleAvatar(
-                        radius: 17,
-                        backgroundColor: AppTheme.card,
+                      borderRadius: BorderRadius.circular(99),
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            colors: [
+                              AppTheme.forest,
+                              AppTheme.emerald600,
+                              const Color(0xFFD4AF68),
+                            ],
+                          ),
+                        ),
                         child: CircleAvatar(
-                          radius: 15,
-                          backgroundColor:
-                              AppTheme.forest.withValues(alpha: 0.12),
-                          child: Text(
-                            author.isNotEmpty ? author[0].toUpperCase() : '?',
-                            style: AppTheme.body(
-                              weight: FontWeight.w800,
-                              color: AppTheme.forest,
-                              size: 13,
-                            ),
+                          radius: 17,
+                          backgroundColor: AppTheme.card,
+                          child: CircleAvatar(
+                            radius: 15,
+                            backgroundColor:
+                                AppTheme.forest.withValues(alpha: 0.12),
+                            backgroundImage: _authorAvatarUrl(item) != null
+                                ? NetworkImage(_authorAvatarUrl(item)!)
+                                : null,
+                            child: _authorAvatarUrl(item) == null
+                                ? Text(
+                                    author.isNotEmpty
+                                        ? author[0].toUpperCase()
+                                        : '?',
+                                    style: AppTheme.body(
+                                      weight: FontWeight.w800,
+                                      color: AppTheme.forest,
+                                      size: 13,
+                                    ),
+                                  )
+                                : null,
                           ),
                         ),
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            author,
-                            style: AppTheme.body(
-                              weight: FontWeight.w800,
-                              size: 14,
-                            ),
-                          ),
-                          if (when != null)
+                      child: InkWell(
+                        onTap: () => _openUserProfile(
+                          member: _memberForUserId(_authorUserId(item)),
+                          userId: _authorUserId(item),
+                          name: author,
+                          avatarUrl: _authorAvatarUrl(item),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              DateFormat.MMMd().add_jm().format(when.toLocal()),
+                              author,
                               style: AppTheme.body(
-                                size: 11,
-                                color: AppTheme.muted,
+                                weight: FontWeight.w800,
+                                size: 14,
                               ),
                             ),
-                        ],
+                            if (when != null)
+                              Text(
+                                DateFormat.MMMd()
+                                    .add_jm()
+                                    .format(when.toLocal()),
+                                style: AppTheme.body(
+                                  size: 11,
+                                  color: AppTheme.muted,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                     IconButton(
@@ -830,7 +1196,7 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
                     Padding(
                       padding: const EdgeInsets.only(right: 12),
                       child: Text(
-                        '${_likes(item)} likes · ${_comments(item).length} comments',
+                        '${_comments(item).length} comments',
                         style: AppTheme.body(
                           size: 12,
                           weight: FontWeight.w600,
@@ -841,25 +1207,96 @@ class _FamilyMediaScreenState extends State<FamilyMediaScreen> {
                   ],
                 ),
               ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+                child: Text(
+                  _likesLabel(item),
+                  style: AppTheme.body(
+                    size: 12,
+                    weight: FontWeight.w700,
+                    color: AppTheme.ink,
+                  ),
+                ),
+              ),
               if (caption.isNotEmpty && url != null)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
                   child: RichText(
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
                     text: TextSpan(
                       style: AppTheme.body(size: 13),
                       children: [
-                        TextSpan(
-                          text: '$author ',
-                          style: AppTheme.body(
-                            size: 13,
-                            weight: FontWeight.w800,
+                        WidgetSpan(
+                          alignment: PlaceholderAlignment.baseline,
+                          baseline: TextBaseline.alphabetic,
+                          child: GestureDetector(
+                            onTap: () => _openUserProfile(
+                              member: _memberForUserId(_authorUserId(item)),
+                              userId: _authorUserId(item),
+                              name: author,
+                              avatarUrl: _authorAvatarUrl(item),
+                            ),
+                            child: Text(
+                              '$author ',
+                              style: AppTheme.body(
+                                size: 13,
+                                weight: FontWeight.w800,
+                              ),
+                            ),
                           ),
                         ),
                         TextSpan(text: caption),
                       ],
                     ),
+                  ),
+                ),
+              if (_comments(item).isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final c in _comments(item).reversed.take(3))
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: RichText(
+                            text: TextSpan(
+                              style: AppTheme.body(size: 13),
+                              children: [
+                                WidgetSpan(
+                                  alignment: PlaceholderAlignment.baseline,
+                                  baseline: TextBaseline.alphabetic,
+                                  child: GestureDetector(
+                                    onTap: () =>
+                                        _openCommentAuthorProfile(c),
+                                    child: Text(
+                                      '${_commentAuthor(c)} ',
+                                      style: AppTheme.body(
+                                        size: 13,
+                                        weight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                TextSpan(text: _commentBody(c)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      if (_comments(item).length > 3)
+                        GestureDetector(
+                          onTap: () => _openPost(item),
+                          child: Text(
+                            'View all ${_comments(item).length} comments',
+                            style: AppTheme.body(
+                              size: 12,
+                              weight: FontWeight.w700,
+                              color: AppTheme.muted,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 )
               else

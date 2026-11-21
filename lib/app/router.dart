@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../features/auth/presentation/providers/auth_providers.dart';
 import '../features/auth/presentation/screens/login_screen.dart';
+import '../features/family/presentation/screens/family_activity_screen.dart';
 import '../features/family/presentation/screens/family_admin_screen.dart';
 import '../features/family/presentation/screens/family_chat_hub_screen.dart';
 import '../features/family/presentation/screens/family_events_screen.dart';
@@ -102,6 +103,10 @@ GoRouter createRouter(AuthProvider auth) {
           GoRoute(
             path: '/family/messages',
             builder: (_, __) => const FamilyMessagesScreen(),
+          ),
+          GoRoute(
+            path: '/family/activity',
+            builder: (_, __) => const FamilyActivityScreen(),
           ),
           GoRoute(
             path: '/family/admin',

@@ -54,6 +54,10 @@ class FamilyGraphView extends StatefulWidget {
 }
 
 class FamilyGraphViewState extends State<FamilyGraphView> {
+  static const double _closedBandH = 42;
+  /// Left column for generation chips so they never sit under member cards.
+  static const double _genGutter = 112;
+
   FamilyLayoutResult? _lastLayout;
   late final TransformationController _tx;
   bool _ownsTx = false;
@@ -64,6 +68,8 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
   /// Once the user taps +/- zoom, don't auto-fit on parent rebuilds.
   bool _userAdjustedZoom = false;
   String? _dataSignature;
+  /// Web parity: tap a generation badge to collapse/expand that band.
+  final Set<int> _closedGens = <int>{};
 
   @override
   void initState() {
@@ -93,8 +99,70 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
       _dataSignature = nextSig;
       _fitSignature = null;
       _userAdjustedZoom = false;
+      _closedGens.clear();
       _scheduleFit();
     }
+  }
+
+  bool _isGenClosed(int generation) => _closedGens.contains(generation);
+
+  void _toggleGeneration(int generation) {
+    setState(() {
+      if (_closedGens.contains(generation)) {
+        _closedGens.remove(generation);
+      } else {
+        _closedGens.add(generation);
+      }
+    });
+  }
+
+  double _closedShiftAbove(List<LayoutBand> bands, double y) {
+    var shift = 0.0;
+    for (final band in bands) {
+      if (!_isGenClosed(band.generation)) continue;
+      if (y + 0.01 >= band.y + band.height) {
+        shift += math.max(0.0, band.height - _closedBandH);
+      }
+    }
+    return shift;
+  }
+
+  double _yOf(List<LayoutBand> bands, double y) =>
+      y - _closedShiftAbove(bands, y);
+
+  bool _yInClosedBand(List<LayoutBand> bands, double y) {
+    for (final band in bands) {
+      if (!_isGenClosed(band.generation)) continue;
+      if (y >= band.y && y < band.y + band.height - 0.5) return true;
+    }
+    return false;
+  }
+
+  double _displayHeight(FamilyLayoutResult layout) {
+    final closedShift = layout.bands.fold<double>(0, (sum, band) {
+      if (!_isGenClosed(band.generation)) return sum;
+      return sum + math.max(0.0, band.height - _closedBandH);
+    });
+    return math.max(layout.height - closedShift, _closedBandH);
+  }
+
+  List<LayoutEdge> _shiftedEdges(FamilyLayoutResult layout) {
+    final out = <LayoutEdge>[];
+    for (final edge in layout.edges) {
+      if (edge.points.any((p) => _yInClosedBand(layout.bands, p.dy))) {
+        continue;
+      }
+      out.add(
+        LayoutEdge(
+          kind: edge.kind,
+          points: [
+            for (final p in edge.points)
+              Offset(p.dx + _genGutter, _yOf(layout.bands, p.dy)),
+          ],
+        ),
+      );
+    }
+    return out;
   }
 
   /// Center a member in the viewport (web `focusNode`).
@@ -109,13 +177,15 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
       }
     }
     if (node == null) return false;
+    final gen = (node['generation'] as num?)?.toInt();
+    if (gen != null) _closedGens.remove(gen);
     final x = (node['x'] as num?)?.toDouble() ?? 0;
     final y = (node['y'] as num?)?.toDouble() ?? 0;
     final w = (node['w'] as num?)?.toDouble() ?? nodeW;
     final h = (node['h'] as num?)?.toDouble() ?? nodeH;
     final scale = _zoom.clamp(0.7, 1.6);
-    final focalX = x + w / 2;
-    final focalY = y + h / 2;
+    final focalX = x + w / 2 + _genGutter;
+    final focalY = _yOf(layout.bands, y + h / 2);
     final dx = _viewport.width / 2 - focalX * scale;
     final dy = _viewport.height / 2 - focalY * scale;
     _tx.value = Matrix4.identity()
@@ -415,8 +485,11 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
     }
     _lastLayout = layout;
     final byId = {for (final m in widget.members) m.id: m};
-    _content = Size(layout.width, layout.height);
+    final displayHeight = _displayHeight(layout);
+    final canvasWidth = layout.width + _genGutter;
+    _content = Size(canvasWidth, displayHeight);
     final theme = widget.theme ?? getTreeTheme(defaultTreeThemeId);
+    final shiftedEdges = _shiftedEdges(layout);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -492,102 +565,149 @@ class FamilyGraphViewState extends State<FamilyGraphView> {
                 maxScale: 2.8,
                 onInteractionEnd: (_) => setState(() {}),
                 child: SizedBox(
-                  width: layout.width,
-                  height: layout.height,
+                  width: canvasWidth,
+                  height: displayHeight,
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
+                      // Soft band washes (full width, behind cards).
                       for (var i = 0; i < layout.bands.length; i++)
                         Positioned(
                           left: 0,
-                          top: layout.bands[i].y,
-                          width: layout.width,
-                          height: layout.bands[i].height,
-                          child: IgnorePointer(
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: theme.bands[i % theme.bands.length].bg
-                                    .withValues(alpha: 0.22),
-                              ),
-                              child: Align(
-                                alignment: Alignment.centerLeft,
-                                child: Padding(
-                                  padding: const EdgeInsets.only(left: 10),
-                                  child: SizedBox(
-                                    width: 108,
-                                    child: Text(
-                                      layout.bands[i].title,
-                                      maxLines: 3,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: theme
-                                            .bands[i % theme.bands.length].ink
-                                            .withValues(alpha: 0.75),
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 12,
-                                        height: 1.2,
-                                      ),
-                                    ),
-                                  ),
+                          top: _yOf(layout.bands, layout.bands[i].y),
+                          width: canvasWidth,
+                          height: _isGenClosed(layout.bands[i].generation)
+                              ? _closedBandH
+                              : layout.bands[i].height,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: theme.bands[i % theme.bands.length].bg
+                                  .withValues(alpha: 0.18),
+                              border: Border(
+                                bottom: BorderSide(
+                                  color: theme.cardBorder
+                                      .withValues(alpha: 0.28),
                                 ),
                               ),
                             ),
                           ),
                         ),
                       CustomPaint(
-                        size: Size(layout.width, layout.height),
+                        size: Size(canvasWidth, displayHeight),
                         painter: _LayoutEdgePainter(
-                          layout.edges,
+                          shiftedEdges,
                           lines: theme.lines,
                         ),
                       ),
-                      ...layout.nodes.map((node) {
-                        final id = (node['id'] ?? '').toString();
-                        final member =
-                            byId[id] ?? FamilyMember.fromJson(node);
-                        final x = (node['x'] as num?)?.toDouble() ?? 0;
-                        final y = (node['y'] as num?)?.toDouble() ?? 0;
-                        final w =
-                            (node['w'] as num?)?.toDouble() ?? nodeW;
-                        final h =
-                            (node['h'] as num?)?.toDouble() ?? nodeH;
-                        final treeRole = node['treeRole']?.toString();
-                        final isMe = _isLoggedIn(member);
-                        final isFocus = _isFocus(member, focus);
-                        final selected = widget.selectedId == member.id;
-                        return Positioned(
-                          left: x,
-                          top: y,
-                          width: w,
-                          height: h,
-                          child: _MemberNode(
-                            member: member,
-                            treeRole: treeRole,
-                            theme: theme,
-                            isMe: isMe,
-                            isFocus: isFocus,
-                            selected: selected,
-                            canAdd: widget.canAdd,
-                            showExpand: widget.showExpand,
-                            onTap: () =>
-                                widget.onMemberTap?.call(member),
-                            onAdd: widget.onAdd == null
-                                ? null
-                                : () => widget.onAdd!(member),
-                            onLink: widget.onLink == null
-                                ? null
-                                : () => widget.onLink!(member),
-                            onExpand: widget.onExpand == null
-                                ? null
-                                : () => widget.onExpand!(member),
-                            onMakeAdmin: widget.onMakeAdmin == null ||
-                                    member.isOwner ||
-                                    !member.hasLoginAccount
-                                ? null
-                                : () => widget.onMakeAdmin!(member),
+                      for (final node in layout.nodes)
+                        if (!_isGenClosed(
+                          (node['generation'] as num?)?.toInt() ?? 0,
+                        ))
+                          Positioned(
+                            left: ((node['x'] as num?)?.toDouble() ?? 0) +
+                                _genGutter,
+                            top: _yOf(
+                              layout.bands,
+                              (node['y'] as num?)?.toDouble() ?? 0,
+                            ),
+                            width: (node['w'] as num?)?.toDouble() ?? nodeW,
+                            height: (node['h'] as num?)?.toDouble() ?? nodeH,
+                            child: Builder(
+                              builder: (_) {
+                                final id = (node['id'] ?? '').toString();
+                                final member =
+                                    byId[id] ?? FamilyMember.fromJson(node);
+                                return _MemberNode(
+                                  member: member,
+                                  treeRole: node['treeRole']?.toString(),
+                                  theme: theme,
+                                  isMe: _isLoggedIn(member),
+                                  isFocus: _isFocus(member, focus),
+                                  selected: widget.selectedId == member.id,
+                                  canAdd: widget.canAdd,
+                                  showExpand: widget.showExpand,
+                                  onTap: () =>
+                                      widget.onMemberTap?.call(member),
+                                  onAdd: widget.onAdd == null
+                                      ? null
+                                      : () => widget.onAdd!(member),
+                                  onLink: widget.onLink == null
+                                      ? null
+                                      : () => widget.onLink!(member),
+                                  onExpand: widget.onExpand == null
+                                      ? null
+                                      : () => widget.onExpand!(member),
+                                  onMakeAdmin: widget.onMakeAdmin == null ||
+                                          member.isOwner ||
+                                          !member.hasLoginAccount
+                                      ? null
+                                      : () => widget.onMakeAdmin!(member),
+                                );
+                              },
+                            ),
                           ),
-                        );
-                      }),
+                      // Generation chips live in their own left gutter (never
+                      // under cards). Drawn last so they stay tappable/visible.
+                      for (var i = 0; i < layout.bands.length; i++)
+                        Builder(
+                          builder: (_) {
+                            final band = layout.bands[i];
+                            final closed = _isGenClosed(band.generation);
+                            final themed =
+                                theme.bands[i % theme.bands.length];
+                            final badge = band.badge.replaceFirst(
+                              RegExp(r'^Generation\s+', caseSensitive: false),
+                              'Gen ',
+                            );
+                            return Positioned(
+                              left: 6,
+                              top: _yOf(layout.bands, band.y) + 8,
+                              width: _genGutter - 12,
+                              child: Material(
+                                color: theme.cardBg.withValues(alpha: 0.96),
+                                elevation: 2,
+                                shadowColor: Colors.black26,
+                                borderRadius: BorderRadius.circular(10),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(10),
+                                  onTap: () =>
+                                      _toggleGeneration(band.generation),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 7,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          closed
+                                              ? Icons.chevron_right
+                                              : Icons.expand_more,
+                                          size: 15,
+                                          color: themed.ink,
+                                        ),
+                                        const SizedBox(width: 2),
+                                        Expanded(
+                                          child: Text(
+                                            badge,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: themed.ink,
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 10,
+                                              height: 1.15,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                     ],
                   ),
                 ),

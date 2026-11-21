@@ -1,4 +1,6 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -7,8 +9,10 @@ import '../../../../app/theme.dart';
 import '../../../../core/utils/media_url.dart';
 import '../../../../core/widgets/ft_branded_page.dart';
 import '../../../../core/widgets/responsive.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../data/family_api_service.dart';
 import '../../domain/profile_privacy.dart';
+import '../providers/family_providers.dart';
 import '../widgets/phone_change_otp_dialog.dart';
 import '../widgets/state_city_select.dart';
 
@@ -47,8 +51,13 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
   final List<_PairFields> _jobs = [];
   bool _loading = true;
   bool _saving = false;
+  bool _editing = false;
+  bool _postsLoading = false;
+  bool _posting = false;
   String? _error;
   String _savedPhone = '';
+  List<Map<String, dynamic>> _posts = const [];
+  final Map<String, TextEditingController> _commentCtrls = {};
 
   @override
   void initState() {
@@ -63,6 +72,9 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
     _phone.dispose();
     _location.dispose();
     _about.dispose();
+    for (final c in _commentCtrls.values) {
+      c.dispose();
+    }
     for (final e in _educations) {
       e.dispose();
     }
@@ -70,6 +82,246 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
       j.dispose();
     }
     super.dispose();
+  }
+
+  TextEditingController _commentCtrlFor(String postId) =>
+      _commentCtrls.putIfAbsent(postId, TextEditingController.new);
+
+  Map<String, dynamic>? _asMap(dynamic raw) {
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return null;
+  }
+
+  String? _postImageUrl(Map<String, dynamic> item) => mediaUrl(
+        (item['url'] ??
+                item['image'] ??
+                item['path'] ??
+                item['file_path'] ??
+                item['filePath'])
+            ?.toString(),
+      );
+
+  int _likes(Map<String, dynamic> item) {
+    final v = item['likesCount'] ??
+        item['likeCount'] ??
+        item['likes'] ??
+        (item['likedBy'] is List ? (item['likedBy'] as List).length : 0);
+    if (v is int) return v;
+    return int.tryParse(v.toString()) ?? 0;
+  }
+
+  bool _likedByMe(Map<String, dynamic> item) =>
+      item['likedByMe'] == true || item['liked'] == true;
+
+  List<Map<String, dynamic>> _commentsOf(Map<String, dynamic> item) {
+    final c = item['comments'];
+    if (c is! List) return const [];
+    return c
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
+  String _commentAuthor(Map<String, dynamic> c) {
+    final author = _asMap(c['author']);
+    final user = _asMap(c['user']);
+    final name = (c['authorName'] ??
+            c['userName'] ??
+            c['name'] ??
+            author?['name'] ??
+            user?['name'] ??
+            '')
+        .toString()
+        .trim();
+    return name.isEmpty ? 'Family member' : name;
+  }
+
+  String _commentBody(Map<String, dynamic> c) =>
+      (c['body'] ?? c['text'] ?? c['comment'] ?? '').toString().trim();
+
+  String _likesLabel(Map<String, dynamic> item) {
+    final n = _likes(item);
+    final mine = _likedByMe(item);
+    if (n <= 0) return 'No likes yet';
+    if (mine && n == 1) return 'Liked by you';
+    if (mine) return 'Liked by you and ${n - 1} other${n - 1 == 1 ? '' : 's'}';
+    return '$n like${n == 1 ? '' : 's'}';
+  }
+
+  Future<void> _composePost() async {
+    final familyId = context.read<FamilySessionProvider>().familyId;
+    if (familyId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No family selected')),
+      );
+      return;
+    }
+    final caption = TextEditingController();
+    String? path;
+    final ok = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: AppTheme.canvas,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) {
+          final canPost =
+              path != null || caption.text.trim().isNotEmpty;
+          return Padding(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              bottom: MediaQuery.viewInsetsOf(ctx).bottom + 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('New post', style: AppTheme.display(size: 20)),
+                  const SizedBox(height: 12),
+                  InkWell(
+                    onTap: () async {
+                      final file = await ImagePicker().pickImage(
+                        source: ImageSource.gallery,
+                        imageQuality: 85,
+                      );
+                      if (file != null) setLocal(() => path = file.path);
+                    },
+                    borderRadius: BorderRadius.circular(14),
+                    child: Container(
+                      height: 140,
+                      width: double.infinity,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: AppTheme.forest.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: AppTheme.forest.withValues(alpha: 0.22),
+                        ),
+                      ),
+                      child: Text(
+                        path == null
+                            ? 'Tap to choose photo'
+                            : 'Photo selected ✓',
+                        style: AppTheme.body(
+                          weight: FontWeight.w700,
+                          color: AppTheme.forest,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: caption,
+                    maxLines: 3,
+                    onChanged: (_) => setLocal(() {}),
+                    decoration: const InputDecoration(
+                      labelText: 'Caption',
+                      hintText: 'Write something about this moment…',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed:
+                          canPost ? () => Navigator.pop(ctx, true) : null,
+                      child: const Text('Post'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    final text = caption.text.trim();
+    caption.dispose();
+    if (ok != true || !mounted) return;
+    if (path == null && text.isEmpty) return;
+    setState(() => _posting = true);
+    try {
+      await context.read<FamilyApiService>().uploadFamilyMedia(
+            familyId,
+            filePath: path,
+            caption: text.isEmpty ? null : text,
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Post shared')),
+      );
+      await _loadPosts();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    } finally {
+      if (mounted) setState(() => _posting = false);
+    }
+  }
+
+  Future<void> _toggleLike(Map<String, dynamic> item) async {
+    final familyId = context.read<FamilySessionProvider>().familyId;
+    final id = (item['id'] ?? '').toString();
+    if (familyId == null || id.isEmpty) return;
+    try {
+      final res =
+          await context.read<FamilyApiService>().likeFamilyMedia(familyId, id);
+      final data = res.data is Map
+          ? Map<String, dynamic>.from(res.data as Map)
+          : <String, dynamic>{};
+      if (!mounted) return;
+      setState(() {
+        final liked = data['liked'] == true;
+        item['likedByMe'] = liked;
+        final count = data['likeCount'] ?? data['likesCount'];
+        if (count != null) {
+          item['likeCount'] =
+              count is int ? count : int.tryParse('$count') ?? _likes(item);
+        } else {
+          item['likeCount'] =
+              liked ? _likes(item) + 1 : (_likes(item) > 0 ? _likes(item) - 1 : 0);
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<void> _sendComment(Map<String, dynamic> item) async {
+    final familyId = context.read<FamilySessionProvider>().familyId;
+    final id = (item['id'] ?? '').toString();
+    if (familyId == null || id.isEmpty) return;
+    final ctrl = _commentCtrlFor(id);
+    final body = ctrl.text.trim();
+    if (body.isEmpty) return;
+    try {
+      final res = await context
+          .read<FamilyApiService>()
+          .commentFamilyMedia(familyId, id, body);
+      final data = res.data is Map
+          ? Map<String, dynamic>.from(res.data as Map)
+          : <String, dynamic>{};
+      final created = _asMap(data['comment']) ??
+          <String, dynamic>{
+            'body': body,
+            'author': {'name': 'You'},
+          };
+      if (!mounted) return;
+      setState(() {
+        final list = List<Map<String, dynamic>>.from(_commentsOf(item))
+          ..add(created);
+        item['comments'] = list;
+        ctrl.clear();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
   }
 
   String? _dateOnly(dynamic raw) {
@@ -184,7 +436,54 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
     } catch (e) {
       _error = e.toString();
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+        _loadPosts();
+      }
+    }
+  }
+
+  Future<void> _loadPosts() async {
+    if (!mounted) return;
+    final familyId = context.read<FamilySessionProvider>().familyId;
+    final userId = context.read<AuthProvider>().user?.id;
+    if (familyId == null || userId == null || userId.isEmpty) {
+      if (mounted) setState(() => _posts = const []);
+      return;
+    }
+    setState(() => _postsLoading = true);
+    try {
+      final res = await context.read<FamilyApiService>().listFamilyMedia(
+            familyId,
+            params: {'authorId': userId},
+          );
+      final data = res.data;
+      List list = const [];
+      if (data is Map && data['media'] is List) {
+        list = data['media'] as List;
+      } else if (data is List) {
+        list = data;
+      }
+      final posts = list
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .where((e) {
+            final author = (e['userId'] ??
+                    e['user_id'] ??
+                    e['authorId'] ??
+                    e['uploadedBy'] ??
+                    '')
+                .toString();
+            return author.isEmpty || author == userId;
+          })
+          .toList();
+      if (!mounted) return;
+      setState(() => _posts = posts);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _posts = const []);
+    } finally {
+      if (mounted) setState(() => _postsLoading = false);
     }
   }
 
@@ -274,6 +573,7 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
     try {
       await _persistProfile(phone);
       if (!mounted) return;
+      setState(() => _editing = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profile saved')),
       );
@@ -301,95 +601,622 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final url = mediaUrl(_avatar);
     return FtBrandedPage(
       title: 'Profile',
-      subtitle: 'Your story in the family',
+      subtitle: _editing
+          ? 'Edit your details'
+          : 'Posts, family presence · like Instagram',
       actions: [
-        TextButton(
-          onPressed: _saving ? null : _save,
-          child: Text(
-            'Save',
-            style: AppTheme.body(
-              weight: FontWeight.w800,
-              color: AppTheme.forest,
+        if (_editing) ...[
+          TextButton(
+            onPressed: () => setState(() => _editing = false),
+            child: Text(
+              'Back',
+              style: AppTheme.body(
+                weight: FontWeight.w700,
+                color: AppTheme.muted,
+              ),
             ),
           ),
-        ),
+          TextButton(
+            onPressed: _saving ? null : _save,
+            child: Text(
+              'Save',
+              style: AppTheme.body(
+                weight: FontWeight.w800,
+                color: AppTheme.forest,
+              ),
+            ),
+          ),
+        ],
       ],
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ResponsiveBody(
-              child: ListView(
+              child: _editing ? _buildEditForm() : _buildSocialProfile(),
+            ),
+    );
+  }
+
+  Widget _buildSocialProfile() {
+    final url = mediaUrl(_avatar);
+    final name = _name.text.trim().isEmpty ? 'Your profile' : _name.text.trim();
+    final about = _about.text.trim();
+    final location = _location.text.trim();
+
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 28),
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Stack(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(3),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFECFDF5), Color(0xFFF0FDF4)],
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [
+                          AppTheme.forest,
+                          AppTheme.forest.withValues(alpha: 0.45),
+                          const Color(0xFFFBBF24),
+                        ],
                       ),
-                      border: Border.all(color: const Color(0xFFD1FAE5)),
                     ),
-                    child: Row(
-                      children: [
-                        Stack(
-                          children: [
-                            CircleAvatar(
-                              radius: 40,
-                              backgroundColor:
-                                  AppTheme.forest.withValues(alpha: 0.12),
-                              backgroundImage:
-                                  url != null ? NetworkImage(url) : null,
-                              child: url == null
-                                  ? const Icon(Icons.person, size: 36)
-                                  : null,
-                            ),
-                            Positioned(
-                              right: 0,
-                              bottom: 0,
-                              child: Material(
-                                color: AppTheme.forest,
-                                shape: const CircleBorder(),
-                                child: InkWell(
-                                  customBorder: const CircleBorder(),
-                                  onTap: _pickAvatar,
-                                  child: const Padding(
-                                    padding: EdgeInsets.all(6),
-                                    child: Icon(
-                                      Icons.photo_camera,
-                                      size: 14,
-                                      color: Colors.black,
-                                    ),
+                    child: CircleAvatar(
+                      radius: 42,
+                      backgroundColor: Colors.white,
+                      child: CircleAvatar(
+                        radius: 39,
+                        backgroundColor:
+                            AppTheme.forest.withValues(alpha: 0.12),
+                        backgroundImage:
+                            url != null ? NetworkImage(url) : null,
+                        child: url == null
+                            ? const Icon(Icons.person, size: 36)
+                            : null,
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    right: 2,
+                    bottom: 2,
+                    child: Material(
+                      color: AppTheme.forest,
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: _pickAvatar,
+                        child: const Padding(
+                          padding: EdgeInsets.all(6),
+                          child: Icon(
+                            Icons.photo_camera,
+                            size: 14,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Row(
+                  children: [
+                    _StatCell(value: '${_posts.length}', label: 'Posts'),
+                    _StatCell(
+                      value: location.isEmpty ? '—' : '1',
+                      label: 'Location',
+                    ),
+                    _StatCell(
+                      value: _blood == 'Unknown' ? '—' : _blood,
+                      label: 'Blood',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        Text(name, style: AppTheme.display(size: 18)),
+        if (about.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(about, style: AppTheme.body(size: 13)),
+        ],
+        if (location.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            location,
+            style: AppTheme.body(size: 12, color: AppTheme.muted),
+          ),
+        ],
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: AppTheme.forest,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                onPressed: () => setState(() => _editing = true),
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                label: const Text('Edit details'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                onPressed: () => context.go('/family/chat'),
+                icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                label: const Text('Message'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: _posting ? null : _composePost,
+          icon: _posting
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.add_photo_alternate_outlined, size: 18),
+          label: Text(_posting ? 'Posting…' : 'Add a post'),
+        ),
+        const SizedBox(height: 18),
+        Row(
+          children: [
+            Icon(Icons.grid_on_rounded, size: 18, color: AppTheme.ink),
+            const SizedBox(width: 8),
+            Text(
+              'Posts',
+              style: AppTheme.body(weight: FontWeight.w800),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        if (_postsLoading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (_posts.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 16),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppTheme.borderSoft),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.photo_library_outlined,
+                    size: 36, color: AppTheme.muted),
+                const SizedBox(height: 10),
+                Text(
+                  'No posts yet',
+                  style: AppTheme.body(weight: FontWeight.w800),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Tap “Add a post” above to share a photo from here.',
+                  textAlign: TextAlign.center,
+                  style: AppTheme.body(size: 12, color: AppTheme.muted),
+                ),
+              ],
+            ),
+          )
+        else
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _posts.length,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 2,
+              mainAxisSpacing: 2,
+            ),
+            itemBuilder: (_, i) {
+              final item = _posts[i];
+              final src = _postImageUrl(item);
+              final caption = (item['caption'] ?? '').toString().trim();
+              final comments = _commentsOf(item).length;
+              final likes = _likes(item);
+              return InkWell(
+                onTap: () => _openPostDetail(item),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (src != null)
+                      CachedNetworkImage(
+                        imageUrl: src,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) =>
+                            Container(color: const Color(0xFFE2E8F0)),
+                        errorWidget: (_, __, ___) => Container(
+                          color: const Color(0xFFE2E8F0),
+                          child: const Icon(Icons.broken_image_outlined),
+                        ),
+                      )
+                    else
+                      Container(
+                        color: AppTheme.forest.withValues(alpha: 0.1),
+                        padding: const EdgeInsets.all(8),
+                        alignment: Alignment.center,
+                        child: Text(
+                          caption.isEmpty ? 'Post' : caption,
+                          maxLines: 4,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: AppTheme.body(
+                            size: 11,
+                            weight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    if (likes > 0 || comments > 0)
+                      Positioned(
+                        right: 4,
+                        bottom: 4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (likes > 0) ...[
+                                const Icon(Icons.favorite,
+                                    size: 10, color: Colors.white),
+                                const SizedBox(width: 2),
+                                Text(
+                                  '$likes',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _name.text.isEmpty ? 'Your profile' : _name.text,
-                                style: AppTheme.display(size: 20),
-                              ),
-                              Text(
-                                'Keep your details updated for the family tree.',
-                                style: AppTheme.body(
-                                  size: 12,
-                                  color: AppTheme.muted,
+                              ],
+                              if (likes > 0 && comments > 0)
+                                const SizedBox(width: 6),
+                              if (comments > 0) ...[
+                                const Icon(Icons.mode_comment,
+                                    size: 10, color: Colors.white),
+                                const SizedBox(width: 2),
+                                Text(
+                                  '$comments',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
-                              ),
+                              ],
                             ],
                           ),
                         ),
-                      ],
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  Future<void> _openPostDetail(Map<String, dynamic> item) async {
+    final id = (item['id'] ?? '').toString();
+    final ctrl = _commentCtrlFor(id.isEmpty ? 'post' : id);
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.white,
+      showDragHandle: true,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            final image = _postImageUrl(item);
+            final caption = (item['caption'] ?? '').toString().trim();
+            final comments = _commentsOf(item);
+            final liked = _likedByMe(item);
+            final name =
+                _name.text.trim().isEmpty ? 'You' : _name.text.trim();
+
+            Future<void> like() async {
+              await _toggleLike(item);
+              setLocal(() {});
+            }
+
+            Future<void> comment() async {
+              await _sendComment(item);
+              setLocal(() {});
+            }
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.viewInsetsOf(ctx).bottom,
+              ),
+              child: SizedBox(
+                height: MediaQuery.sizeOf(ctx).height * 0.92,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 8, 8),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 16,
+                            backgroundColor:
+                                AppTheme.forest.withValues(alpha: 0.12),
+                            backgroundImage: mediaUrl(_avatar) != null
+                                ? NetworkImage(mediaUrl(_avatar)!)
+                                : null,
+                            child: mediaUrl(_avatar) == null
+                                ? Text(
+                                    name[0].toUpperCase(),
+                                    style: AppTheme.body(
+                                      weight: FontWeight.w800,
+                                      color: AppTheme.forest,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              name,
+                              style: AppTheme.body(weight: FontWeight.w800),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (image != null)
+                      Expanded(
+                        flex: 5,
+                        child: CachedNetworkImage(
+                          imageUrl: image,
+                          fit: BoxFit.contain,
+                          width: double.infinity,
+                        ),
+                      )
+                    else if (caption.isNotEmpty)
+                      Expanded(
+                        flex: 2,
+                        child: Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Text(
+                              caption,
+                              textAlign: TextAlign.center,
+                              style: AppTheme.display(size: 20),
+                            ),
+                          ),
+                        ),
+                      ),
+                    Expanded(
+                      flex: 4,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                IconButton(
+                                  onPressed: like,
+                                  icon: Icon(
+                                    liked
+                                        ? Icons.favorite_rounded
+                                        : Icons.favorite_border,
+                                    color: liked
+                                        ? AppTheme.accentPink
+                                        : AppTheme.ink,
+                                  ),
+                                ),
+                                Text(
+                                  _likesLabel(item),
+                                  style: AppTheme.body(
+                                    size: 13,
+                                    weight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (caption.isNotEmpty && image != null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: RichText(
+                                  text: TextSpan(
+                                    style: AppTheme.body(size: 13),
+                                    children: [
+                                      TextSpan(
+                                        text: '$name ',
+                                        style: AppTheme.body(
+                                          size: 13,
+                                          weight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      TextSpan(text: caption),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            Text(
+                              'Comments (${comments.length})',
+                              style:
+                                  AppTheme.body(weight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 6),
+                            Expanded(
+                              child: comments.isEmpty
+                                  ? Text(
+                                      'No comments yet.',
+                                      style: AppTheme.body(
+                                        size: 13,
+                                        color: AppTheme.muted,
+                                      ),
+                                    )
+                                  : ListView(
+                                      children: [
+                                        for (final c in comments)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              bottom: 8,
+                                            ),
+                                            child: RichText(
+                                              text: TextSpan(
+                                                style: AppTheme.body(size: 13),
+                                                children: [
+                                                  TextSpan(
+                                                    text:
+                                                        '${_commentAuthor(c)} ',
+                                                    style: AppTheme.body(
+                                                      size: 13,
+                                                      weight: FontWeight.w800,
+                                                    ),
+                                                  ),
+                                                  TextSpan(
+                                                    text: _commentBody(c),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                            ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    controller: ctrl,
+                                    decoration: const InputDecoration(
+                                      hintText: 'Write a comment…',
+                                      isDense: true,
+                                    ),
+                                    onSubmitted: (_) => comment(),
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: comment,
+                                  icon: const Icon(
+                                    Icons.send,
+                                    color: Color(0xFFFF5C8A),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    if (mounted) setState(() {});
+  }
+
+  Widget _buildEditForm() {
+    final url = mediaUrl(_avatar);
+    return ListView(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            gradient: const LinearGradient(
+              colors: [Color(0xFFECFDF5), Color(0xFFF0FDF4)],
+            ),
+            border: Border.all(color: const Color(0xFFD1FAE5)),
+          ),
+          child: Row(
+            children: [
+              Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 40,
+                    backgroundColor: AppTheme.forest.withValues(alpha: 0.12),
+                    backgroundImage: url != null ? NetworkImage(url) : null,
+                    child: url == null
+                        ? const Icon(Icons.person, size: 36)
+                        : null,
+                  ),
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: Material(
+                      color: AppTheme.forest,
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: _pickAvatar,
+                        child: const Padding(
+                          padding: EdgeInsets.all(6),
+                          child: Icon(
+                            Icons.photo_camera,
+                            size: 14,
+                            color: Colors.black,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                ],
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _name.text.isEmpty ? 'Your profile' : _name.text,
+                      style: AppTheme.display(size: 20),
+                    ),
+                    Text(
+                      'Keep your details updated for the family tree.',
+                      style: AppTheme.body(
+                        size: 12,
+                        color: AppTheme.muted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
                   TextField(
                     controller: _name,
                     decoration: const InputDecoration(labelText: 'Name'),
@@ -635,8 +1462,32 @@ class _FamilyProfileScreenState extends State<FamilyProfileScreen> {
                   ),
                   const SizedBox(height: 28),
                 ],
-              ),
-            ),
+    );
+  }
+}
+
+class _StatCell extends StatelessWidget {
+  const _StatCell({required this.value, required this.label});
+
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: AppTheme.body(weight: FontWeight.w900, size: 16),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: AppTheme.body(size: 11, color: AppTheme.muted),
+          ),
+        ],
+      ),
     );
   }
 }

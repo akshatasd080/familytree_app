@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -122,14 +123,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  FamilyMember? _first(List<String> labels) {
-    final set = labels.map(_norm).toSet();
-    for (final m in _members) {
-      if (set.contains(_norm(m.relationship))) return m;
-    }
-    return null;
-  }
-
   String _memberGender(FamilyMember m) {
     final raw = (m.gender ?? m.profileInfo['gender'] ?? '')
         .toString()
@@ -224,45 +217,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     };
   }
 
-  List<FamilyMember> _snapshotMembers() {
-    final out = <FamilyMember>[];
-    final seen = <String>{};
-    void add(FamilyMember? m) {
-      if (m == null || !seen.add(m.id)) return;
-      out.add(m);
-    }
-
-    add(_first(['father', 'dad']));
-    add(_first(['mother', 'mom']));
-    add(
-      _members.cast<FamilyMember?>().firstWhere(
-            (m) => _norm(m?.relationship) == 'sitecreator',
-            orElse: () => _members.isNotEmpty ? _members.first : null,
-          ),
-    );
-    for (final m in _members.where(
-      (m) => ['brother', 'sister', 'son', 'daughter']
-          .contains(_norm(m.relationship)),
-    )) {
-      add(m);
-      if (out.length >= 6) break;
-    }
-    if (out.length < 4) {
-      for (final m in _members) {
-        add(m);
-        if (out.length >= 6) break;
-      }
-    }
-    return out;
-  }
-
   int get _unreadNotices =>
       context.watch<FamilyNoticesUnreadProvider>().unreadCount;
 
   int get _unreadChats =>
       context.watch<FamilyChatUnreadProvider>().unreadCount;
 
-  int get _headerMessageCount {
+  int get _notificationBadgeCount {
     var n = 0;
     for (final item in _notifications) {
       final read = item['is_read'] == true || item['isRead'] == true;
@@ -356,20 +317,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         clipBehavior: Clip.none,
                         children: [
                           IconButton(
-                            tooltip: 'imp-Messages',
-                            onPressed: () =>
-                                context.openShell('/family/messages'),
+                            tooltip: 'Notifications',
+                            onPressed: () => context.push('/family/activity'),
                             icon: Icon(
-                              Icons.chat_bubble_outline_rounded,
+                              Icons.notifications_outlined,
                               color: AppTheme.ink,
                             ),
                           ),
-                          if (_headerMessageCount > 0)
+                          if (_notificationBadgeCount > 0)
                             Positioned(
                               right: 6,
                               top: 6,
                               child: FtCountBadge(
-                                count: _headerMessageCount,
+                                count: _notificationBadgeCount,
                                 compact: true,
                               ),
                             ),
@@ -445,12 +405,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                             const SizedBox(height: 16),
                             _FamilyOverviewCard(overview: _familyOverview()),
-                            const SizedBox(height: 16),
-                            _FamilySnapshotSection(
-                              members: _snapshotMembers(),
-                              onOpenTree: () =>
-                                  context.openShell('/family/tree'),
-                            ),
                             if (_recentPosts.isNotEmpty) ...[
                               const SizedBox(height: 18),
                               _LatestFromFamily(
@@ -458,91 +412,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 onOpenFeed: () =>
                                     context.openShell('/family/media'),
                               ),
-                            ],
-                            if (_notifications.isNotEmpty) ...[
-                              const SizedBox(height: 18),
-                              Text(
-                                'Activity',
-                                style: AppTheme.body(
-                                  weight: FontWeight.w800,
-                                  size: 15,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              ..._notifications.take(4).map((n) {
-                                final id = (n['id'] ?? '').toString();
-                                final isRead = n['is_read'] == true ||
-                                    n['isRead'] == true;
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: Material(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(16),
-                                    child: InkWell(
-                                      borderRadius: BorderRadius.circular(16),
-                                      onTap: id.isEmpty
-                                          ? null
-                                          : () async {
-                                              try {
-                                                await context
-                                                    .read<FamilyApiService>()
-                                                    .markNotificationRead(id);
-                                                if (!mounted) return;
-                                                setState(() {
-                                                  _notifications =
-                                                      _notifications
-                                                          .where(
-                                                            (item) =>
-                                                                (item['id'] ??
-                                                                        '')
-                                                                    .toString() !=
-                                                                id,
-                                                          )
-                                                          .toList();
-                                                });
-                                              } catch (_) {}
-                                            },
-                                      child: Container(
-                                        padding: const EdgeInsets.all(12),
-                                        decoration: BoxDecoration(
-                                          borderRadius:
-                                              BorderRadius.circular(16),
-                                          border: Border.all(
-                                            color: const Color(0xFFD7E5DC),
-                                          ),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Icon(
-                                              isRead
-                                                  ? Icons
-                                                      .notifications_none_outlined
-                                                  : Icons.notifications_outlined,
-                                              color: AppTheme.forest,
-                                              size: 18,
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Expanded(
-                                              child: Text(
-                                                (n['message'] ??
-                                                        n['title'] ??
-                                                        'Notice')
-                                                    .toString(),
-                                                style: AppTheme.body(
-                                                  size: 13,
-                                                  weight: isRead
-                                                      ? FontWeight.w400
-                                                      : FontWeight.w600,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }),
                             ],
                           ],
                         ),
@@ -997,144 +866,6 @@ class _FamilyOverviewCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _FamilySnapshotSection extends StatelessWidget {
-  const _FamilySnapshotSection({
-    required this.members,
-    required this.onOpenTree,
-  });
-
-  final List<FamilyMember> members;
-  final VoidCallback onOpenTree;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 14, 12, 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFD7E5DC)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Family snapshot',
-                  style: AppTheme.body(weight: FontWeight.w800, size: 15),
-                ),
-              ),
-              TextButton(
-                onPressed: onOpenTree,
-                child: Text(
-                  'Open tree →',
-                  style: AppTheme.body(
-                    weight: FontWeight.w700,
-                    color: AppTheme.forest,
-                    size: 13,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (members.isEmpty)
-            Text(
-              'Add relatives on your tree to see a snapshot here.',
-              style: AppTheme.body(size: 12, color: AppTheme.muted),
-            )
-          else
-            SizedBox(
-              height: 96,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: members.length,
-                separatorBuilder: (_, __) => Padding(
-                  padding: const EdgeInsets.only(top: 28),
-                  child: Container(
-                    width: 18,
-                    height: 2,
-                    color: AppTheme.forest.withValues(alpha: 0.35),
-                  ),
-                ),
-                itemBuilder: (_, i) {
-                  final m = members[i];
-                  final isMe =
-                      _normRel(m.relationship) == 'sitecreator';
-                  final url = mediaUrl(m.avatar);
-                  return SizedBox(
-                    width: 72,
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(2.5),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: isMe
-                                  ? AppTheme.forest
-                                  : const Color(0xFFD7E5DC),
-                              width: isMe ? 2.2 : 1.2,
-                            ),
-                          ),
-                          child: CircleAvatar(
-                            radius: 24,
-                            backgroundColor:
-                                AppTheme.forest.withValues(alpha: 0.1),
-                            backgroundImage:
-                                url != null ? NetworkImage(url) : null,
-                            child: url == null
-                                ? Text(
-                                    m.name.isNotEmpty
-                                        ? m.name[0].toUpperCase()
-                                        : '?',
-                                    style: AppTheme.body(
-                                      weight: FontWeight.w800,
-                                      color: AppTheme.forest,
-                                    ),
-                                  )
-                                : null,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          m.name.split(' ').first,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTheme.body(
-                            size: 12,
-                            weight: FontWeight.w700,
-                          ),
-                        ),
-                        Text(
-                          isMe
-                              ? 'You'
-                              : (m.relationship ?? 'Member'),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTheme.body(
-                            size: 10,
-                            color: AppTheme.muted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  String _normRel(String? rel) =>
-      (rel ?? '').toLowerCase().replaceAll(RegExp(r'\s+'), '');
 }
 
 class _LatestFromFamily extends StatelessWidget {
